@@ -1,6 +1,6 @@
 public class Main {
     public static void main(String[] args) {
-        String regex = "(a|b*)*ba";
+        String regex = "(a|b)*abb";
         RegexToAFD regexToAFD = new RegexToAFD();
         regex = regexToAFD.aumentarRegex(regex);
 
