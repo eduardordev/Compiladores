@@ -22,8 +22,5 @@ public class Main {
         System.out.println("\n=== Representación DOT del DFA ===");
         System.out.println(dot);
 
-
-        Map<Set<Integer>, Map<Character, Set<Integer>>> dfaMin = syntaxTree.minimizarDFA();
-        System.out.println("\n=== Tabla de Transiciones del DFA Minimizado ===");
     }
 }
