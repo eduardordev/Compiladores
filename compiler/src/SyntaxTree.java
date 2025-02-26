@@ -1,4 +1,5 @@
 import java.util.*;
+import java.io.PrintWriter;
 
 public class SyntaxTree {
     Node root;
@@ -25,6 +26,7 @@ public class SyntaxTree {
     }
 
     public SyntaxTree(String regex) {
+        // Se espera que la expresión regular incluya el símbolo final '#' para marcar el final.
         this.root = buildSyntaxTree(regex);
         calcularFunciones(root);
         calcularSiguientePosicion(root);
@@ -51,7 +53,7 @@ public class SyntaxTree {
                 }
                 operators.push(ch);
             } else {
-
+                // Si es un símbolo (literal), se inserta el operador de concatenación si es necesario
                 if (!operands.isEmpty() && !operators.contains('(') && operators.peek() != '|') {
                     while (!operators.isEmpty() && precedence(operators.peek()) >= precedence('.')) {
                         procesarOperador(operands, operators.pop());
@@ -93,12 +95,12 @@ public class SyntaxTree {
     }
 
     private int precedence(char operator) {
-        return switch (operator) {
-            case '|' -> 1;
-            case '.' -> 2;
-            case '*' -> 3;
-            default -> 0;
-        };
+        switch (operator) {
+            case '|': return 1;
+            case '.': return 2;
+            case '*': return 3;
+            default: return 0;
+        }
     }
 
     private void calcularFunciones(Node node) {
@@ -115,8 +117,16 @@ public class SyntaxTree {
                 break;
             case ".":
                 anulable.put(node, anulable.get(node.left) && anulable.get(node.right));
-                primeraPosicion.put(node, anulable.get(node.left) ? union(primeraPosicion.get(node.left), primeraPosicion.get(node.right)) : primeraPosicion.get(node.left));
-                ultimaPosicion.put(node, anulable.get(node.right) ? union(ultimaPosicion.get(node.left), ultimaPosicion.get(node.right)) : ultimaPosicion.get(node.right));
+                if (anulable.get(node.left)) {
+                    primeraPosicion.put(node, union(primeraPosicion.get(node.left), primeraPosicion.get(node.right)));
+                } else {
+                    primeraPosicion.put(node, primeraPosicion.get(node.left));
+                }
+                if (anulable.get(node.right)) {
+                    ultimaPosicion.put(node, union(ultimaPosicion.get(node.left), ultimaPosicion.get(node.right)));
+                } else {
+                    ultimaPosicion.put(node, ultimaPosicion.get(node.right));
+                }
                 break;
             case "*":
                 anulable.put(node, true);
@@ -125,8 +135,8 @@ public class SyntaxTree {
                 break;
             default:
                 anulable.put(node, false);
-                primeraPosicion.put(node, new HashSet<>(Collections.singleton(node.posicion)));
-                ultimaPosicion.put(node, new HashSet<>(Collections.singleton(node.posicion)));
+                primeraPosicion.put(node, new HashSet<>(Arrays.asList(node.posicion)));
+                ultimaPosicion.put(node, new HashSet<>(Arrays.asList(node.posicion)));
                 break;
         }
     }
@@ -162,16 +172,10 @@ public class SyntaxTree {
     }
 
     public Map<Set<Integer>, Map<Character, Set<Integer>>> construirTablaTransicion() {
-
         Set<Integer> estadoInicial = primeraPosicion.get(root);
 
         Set<Character> alfabeto = new HashSet<>();
-        for (int pos : siguientePosicion.keySet()) {
-            Node nodo = encontrarNodoPorPosicion(root, pos);
-            if (nodo != null && !nodo.value.equals("#") && !isOperator(nodo.value)) {
-                alfabeto.add(nodo.value.charAt(0));
-            }
-        }
+        obtenerAlfabeto(root, alfabeto);
 
         Map<Set<Integer>, Map<Character, Set<Integer>>> tablaTransicion = new LinkedHashMap<>();
         Queue<Set<Integer>> cola = new LinkedList<>();
@@ -186,7 +190,8 @@ public class SyntaxTree {
                 for (int pos : estadoActual) {
                     Node nodo = encontrarNodoPorPosicion(root, pos);
                     if (nodo != null && nodo.value.equals(String.valueOf(simbolo))) {
-                        siguienteEstado.addAll(siguientePosicion.get(pos));
+                        if (siguientePosicion.containsKey(pos))
+                            siguienteEstado.addAll(siguientePosicion.get(pos));
                     }
                 }
                 if (!siguienteEstado.isEmpty()) {
@@ -198,8 +203,16 @@ public class SyntaxTree {
                 }
             }
         }
-
         return tablaTransicion;
+    }
+
+    private void obtenerAlfabeto(Node node, Set<Character> alfabeto) {
+        if (node == null) return;
+        if (!isOperator(node.value) && !node.value.equals("#")) {
+            alfabeto.add(node.value.charAt(0));
+        }
+        obtenerAlfabeto(node.left, alfabeto);
+        obtenerAlfabeto(node.right, alfabeto);
     }
 
     private Node encontrarNodoPorPosicion(Node node, int posicion) {
@@ -234,10 +247,9 @@ public class SyntaxTree {
             System.out.println();
         }
 
-        // Estados de aceptación
         System.out.println("\nEstados de Aceptación:");
         for (Set<Integer> estado : tabla.keySet()) {
-            if (estado.contains(posicionAceptacion)) {
+            if (estado.contains(posicionCounter - 1)) {
                 System.out.println(estado);
             }
         }
@@ -252,4 +264,72 @@ public class SyntaxTree {
         System.out.println("  Primera Posición: " + primeraPosicion.get(node));
         System.out.println("  Última Posición: " + ultimaPosicion.get(node));
     }
-}
+    
+    // Método para simular el DFA con una cadena de entrada
+    public boolean simularDFA(String input) {
+        Map<Set<Integer>, Map<Character, Set<Integer>>> tabla = construirTablaTransicion();
+        Set<Integer> estadoActual = primeraPosicion.get(root);
+        for (char c : input.toCharArray()) {
+            Map<Character, Set<Integer>> trans = tabla.get(estadoActual);
+            if (trans == null || !trans.containsKey(c)) {
+                return false;
+            }
+            estadoActual = trans.get(c);
+        }
+        int posicionAceptacion = posicionCounter - 1;
+        return estadoActual.contains(posicionAceptacion);
+    }
+    
+    // Método para generar una representación DOT del DFA (para Graphviz)
+    public String generarDOT() {
+        Map<Set<Integer>, Map<Character, Set<Integer>>> tabla = construirTablaTransicion();
+        StringBuilder dot = new StringBuilder();
+        dot.append("digraph DFA {\n");
+        dot.append("  rankdir=LR;\n");
+        
+        // Asignar un ID único a cada estado
+        Map<Set<Integer>, Integer> estadoIDs = new HashMap<>();
+        int idContador = 0;
+        for (Set<Integer> estado : tabla.keySet()) {
+            estadoIDs.put(estado, idContador++);
+        }
+        
+        // Determinar el estado de aceptación (se asume que es el que contiene la última posición)
+        int posicionFinal = posicionCounter - 1;
+        
+        // Definir los nodos (se usa doble círculo para estados de aceptación)
+        for (Set<Integer> estado : tabla.keySet()) {
+            int id = estadoIDs.get(estado);
+            String forma = estado.contains(posicionFinal) ? "doublecircle" : "circle";
+            dot.append("  " + id + " [shape=" + forma + " label=\"{" + estado + "}\"];\n");
+        }
+        
+        // Nodo invisible para indicar el estado inicial
+        Set<Integer> estadoInicial = primeraPosicion.get(root);
+        int idInicial = estadoIDs.get(estadoInicial);
+        dot.append("  __start [shape=none, label=\"\"];\n");
+        dot.append("  __start -> " + idInicial + ";\n");
+        
+        // Definir las transiciones
+        for (Set<Integer> estado : tabla.keySet()) {
+            int idOrigen = estadoIDs.get(estado);
+            Map<Character, Set<Integer>> transiciones = tabla.get(estado);
+            for (Map.Entry<Character, Set<Integer>> entrada : transiciones.entrySet()) {
+                char simbolo = entrada.getKey();
+                Set<Integer> estadoDestino = entrada.getValue();
+                int idDestino = estadoIDs.get(estadoDestino);
+                dot.append("  " + idOrigen + " -> " + idDestino + " [label=\"" + simbolo + "\"];\n");
+            }
+        }
+        
+        dot.append("}\n");
+        return dot.toString();
+    }
+    
+    // Método de minimización del DFA (placeholder: se retorna la tabla original)
+    public Map<Set<Integer>, Map<Character, Set<Integer>>> minimizarDFA() {
+        System.out.println("\n[Minimización del DFA] - No implementado completamente, se retorna el DFA original.");
+        return construirTablaTransicion();
+    }}
+
+    
