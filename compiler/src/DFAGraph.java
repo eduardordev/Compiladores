@@ -1,66 +1,72 @@
-import guru.nidi.graphviz.attribute.Label;
-import guru.nidi.graphviz.attribute.Rank;
-import guru.nidi.graphviz.attribute.Shape;
-import guru.nidi.graphviz.engine.Format;
-import guru.nidi.graphviz.engine.Graphviz;
-import guru.nidi.graphviz.model.Graph;
-import guru.nidi.graphviz.model.Node;
-
-import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import static guru.nidi.graphviz.model.Factory.graph;
-import static guru.nidi.graphviz.model.Factory.node;
-import static guru.nidi.graphviz.model.Link.to;
-
 public class DFAGraph {
-    private final Map<String, Map<Character, String>> dfa;
-    private final String initialState;
-    private final Set<String> finalStates;
+    public static void generarDOT(AFDConstructor.AFD afd, String nombreArchivo) {
+        StringBuilder dot = new StringBuilder();
+        dot.append("digraph AFD {\n");
+        dot.append("  rankdir=LR;\n");
+        dot.append("  __start [shape=none,label=\"\"];\n");
 
-    public DFAGraph() {
-        this.dfa = new HashMap<>();
-        this.initialState = "q0";
-        this.finalStates = Set.of("q2"); // Estados finales
-
-        // Definir transiciones del DFA
-        dfa.put("q0", Map.of('a', "q1", 'b', "q0"));
-        dfa.put("q1", Map.of('a', "q1", 'b', "q2"));
-        dfa.put("q2", Map.of('a', "q2", 'b', "q0")); // q2 es final
-    }
-
-    public void generarGrafico(String fileName) throws IOException {
-        Graph g = graph("DFA").directed().graphAttr().with(Rank.dir(Rank.RankDir.LEFT_TO_RIGHT));
-        Node startNode = (Node) node("__start").with(Shape.NONE);
-        Map<String, Node> nodeMap = new HashMap<>();
-
-        // Crear nodos del DFA
-        for (String state : dfa.keySet()) {
-            boolean isFinal = finalStates.contains(state);
-            Node n = (Node) node(state).with(isFinal ? Shape.DOUBLE_CIRCLE : Shape.CIRCLE);
-            nodeMap.put(state, n);
+        // Nodos del AFD
+        for (int estado : afd.transiciones.keySet()) {
+            boolean esFinal = afd.estadosFinales.contains(estado);
+            dot.append("  q").append(estado)
+                    .append(" [shape=").append(esFinal ? "doublecircle" : "circle")
+                    .append(", label=\"q").append(estado).append("\"];\n");
         }
 
-        // Agregar transiciones
-        for (var entry : dfa.entrySet()) {
-            String state = entry.getKey();
-            for (var transition : entry.getValue().entrySet()) {
-                Character symbol = transition.getKey();
-                String nextState = transition.getValue();
-                nodeMap.get(state).link(to((Node) nodeMap.get(nextState)).with(Label.of(symbol.toString())));
+        // Flecha inicial
+        dot.append("  __start -> q").append(afd.estadoInicial).append(";\n");
+
+        // Transiciones
+        for (Map.Entry<Integer, Map<Character, Integer>> entrada : afd.transiciones.entrySet()) {
+            int origen = entrada.getKey();
+            for (Map.Entry<Character, Integer> trans : entrada.getValue().entrySet()) {
+                char simbolo = trans.getKey();
+                int destino = trans.getValue();
+
+                // Escape seguro del símbolo para el label
+                String etiquetaEscapada = switch (simbolo) {
+                    case '"' -> "\\\"";
+                    case '\\' -> "\\\\";
+                    case '\n' -> "\\n";
+                    case '\t' -> "\\t";
+                    default -> String.valueOf(simbolo);
+                };
+
+                dot.append("  q").append(origen)
+                        .append(" -> q").append(destino)
+                        .append(" [label=\"").append(etiquetaEscapada).append("\"];\n");
             }
         }
 
-        // Conectar estado inicial
-        g = g.with(startNode.link(nodeMap.get(initialState)));
+        dot.append("}\n");
 
-        // Guardar el gráfico en un archivo
-        Graphviz.fromGraph(g).render(Format.PNG).toFile(new File(fileName));
-        System.out.println("DFA generado en: " + fileName);
+        // Escribir el archivo .dot
+        try (FileWriter writer = new FileWriter(nombreArchivo + ".dot")) {
+            writer.write(dot.toString());
+            System.out.println("📄 Archivo DOT generado: " + nombreArchivo + ".dot");
+        } catch (IOException e) {
+            System.err.println("❌ Error al escribir el archivo DOT: " + e.getMessage());
+            return;
+        }
+
+        // Ejecutar Graphviz para generar PNG
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dot", "-Tpng", nombreArchivo + ".dot", "-o", nombreArchivo + ".png");
+            pb.redirectErrorStream(true);
+            Process proceso = pb.start();
+            int exitCode = proceso.waitFor();
+            if (exitCode == 0) {
+                System.out.println("🖼️ Imagen PNG generada: " + nombreArchivo + ".png");
+            } else {
+                System.err.println("❌ Error al ejecutar Graphviz. Código: " + exitCode);
+            }
+        } catch (IOException | InterruptedException e) {
+            System.err.println("❌ Error al generar imagen PNG: " + e.getMessage());
+        }
     }
-
-
 }

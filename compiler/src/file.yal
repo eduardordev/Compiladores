@@ -1,0 +1,66 @@
+
+
+let digit     = ['0'-'9']
+let letter    = ['a'-'z''A'-'Z']
+let digits    = digit+
+let letters   = letter+
+let id        = letter (letter digit)*
+
+rule gettoken =
+    // Palabras reservadas
+  if         { System.out.println("IF"); }
+  else       { System.out.println("ELSE"); }
+  while      { System.out.println("WHILE"); }
+  for        { System.out.println("FOR"); }
+  return     { System.out.println("RETURN"); }
+  int        { System.out.println("INT_TYPE"); }
+  float      { System.out.println("FLOAT_TYPE"); }
+  boolean    { System.out.println("BOOLEAN_TYPE"); }
+  char       { System.out.println("CHAR_TYPE"); }
+  true       { System.out.println("TRUE"); }
+  false      { System.out.println("FALSE"); }
+  void       { System.out.println("VOID_TYPE"); }
+  main       { System.out.println("MAIN"); }
+
+    // Identificadores y números
+  id           { System.out.println("ID: " + lexema); }
+  digits       { System.out.println("NUM: " + lexema); }
+
+    // Operadores aritméticos
+  "+"          { System.out.println("PLUS"); }
+  "-"          { System.out.println("MINUS"); }
+  "*"          { System.out.println("MULTIPLY"); }
+  "/"          { System.out.println("DIVIDE"); }
+  "%"          { System.out.println("MODULO"); }
+
+    // Operadores relacionales
+  "=="         { System.out.println("EQ"); }
+  "!="         { System.out.println("NEQ"); }
+  "<"          { System.out.println("LT"); }
+  "<="         { System.out.println("LE"); }
+  ">"         { System.out.println("GT"); }
+  ">="         { System.out.println("GE"); }
+
+    // Operadores lógicos
+  "&&"         { System.out.println("AND"); }
+  "||"         { System.out.println("OR"); }
+  "!"          { System.out.println("NOT"); }
+
+    // Asignación
+  "="          { System.out.println("ASSIGN"); }
+
+    // Delimitadores
+  "("          { System.out.println("LPAREN"); }
+  ")"          { System.out.println("RPAREN"); }
+  "{"          { System.out.println("LBRACE"); }
+  "}"          { System.out.println("RBRACE"); }
+  "["          { System.out.println("LBRACKET"); }
+  "]"          { System.out.println("RBRACKET"); }
+  ";"          { System.out.println("SEMICOLON"); }
+  ","          { System.out.println("COMMA"); }
+
+    // Ignorar espacios, tabulaciones y retorno de carro
+  [' ' '\t' '\r'] { }
+  ['\n']       { System.out.println("EOL"); }
+
+
