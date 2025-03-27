@@ -1,3 +1,5 @@
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 public class SyntaxTree {
@@ -319,6 +321,30 @@ public class SyntaxTree {
         
         dot.append("}\n");
         return dot.toString();
+    }
+
+    public void generarImagenDFA(String nombreArchivo) {
+        String dotCode = generarDOT(); // Obtener código DOT
+        String dotFilePath = nombreArchivo + ".dot";
+        String pngFilePath = nombreArchivo + ".png";
+
+        try (FileWriter fileWriter = new FileWriter(dotFilePath)) {
+            fileWriter.write(dotCode);
+            System.out.println("📄 Archivo DOT generado: " + dotFilePath);
+        } catch (IOException e) {
+            System.err.println("❌ Error al guardar el archivo DOT: " + e.getMessage());
+            return;
+        }
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder("dot", "-Tpng", dotFilePath, "-o", pngFilePath);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            process.waitFor();
+            System.out.println("🖼️ Imagen PNG generada: " + pngFilePath);
+        } catch (IOException | InterruptedException e) {
+            System.err.println("❌ Error al ejecutar Graphviz: " + e.getMessage());
+        }
     }
 }
 

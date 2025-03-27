@@ -19,8 +19,14 @@ public class Main {
         System.out.println("La cadena " + (aceptada ? "es aceptada." : "no es aceptada."));
 
         String dot = syntaxTree.generarDOT();
-        System.out.println("\n=== Representación DOT del DFA ===");
-        System.out.println(dot);
+//        System.out.println("\n=== Representación DOT del DFA ===");
+//        System.out.println(dot);
+
+        // Guardar y convertir a imagen PNG
+        String nombreArchivo = "dfa"; // Nombre base del archivo
+        syntaxTree.generarImagenDFA(nombreArchivo);
+
+        System.out.println("\n✅ Imagen del DFA generada: " + nombreArchivo + ".png");
 
     }
 }

@@ -1,3 +1,7 @@
+import guru.nidi.graphviz.model.LinkSource;
+
+import java.util.List;
+
 public class Node {
     String value;
     Node left, right;
@@ -39,5 +43,9 @@ public class Node {
 
     public void setPosicion(Integer posicion) {
         this.posicion = posicion;
+    }
+
+    public List<? extends LinkSource> link(Node with) {
+        return List.of();
     }
 }
