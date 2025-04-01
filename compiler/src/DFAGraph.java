@@ -48,9 +48,9 @@ public class DFAGraph {
         // Escribir el archivo .dot
         try (FileWriter writer = new FileWriter(nombreArchivo + ".dot")) {
             writer.write(dot.toString());
-            System.out.println("📄 Archivo DOT generado: " + nombreArchivo + ".dot");
+            System.out.println("Archivo DOT generado: " + nombreArchivo + ".dot");
         } catch (IOException e) {
-            System.err.println("❌ Error al escribir el archivo DOT: " + e.getMessage());
+            System.err.println("Error al escribir el archivo DOT: " + e.getMessage());
             return;
         }
 
@@ -61,12 +61,12 @@ public class DFAGraph {
             Process proceso = pb.start();
             int exitCode = proceso.waitFor();
             if (exitCode == 0) {
-                System.out.println("🖼️ Imagen PNG generada: " + nombreArchivo + ".png");
+                System.out.println("Imagen PNG generada: " + nombreArchivo + ".png");
             } else {
-                System.err.println("❌ Error al ejecutar Graphviz. Código: " + exitCode);
+                System.err.println("Error al ejecutar Graphviz. Código: " + exitCode);
             }
         } catch (IOException | InterruptedException e) {
-            System.err.println("❌ Error al generar imagen PNG: " + e.getMessage());
+            System.err.println("Error al generar imagen PNG: " + e.getMessage());
         }
     }
 }

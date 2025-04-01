@@ -222,6 +222,7 @@ public class SyntaxTree {
         return encontrarNodoPorPosicion(node.right, posicion);
     }
 
+    @SuppressWarnings("unused")
     public void imprimirTablaTransicion() {
         Map<Set<Integer>, Map<Character, Set<Integer>>> tabla = construirTablaTransicion();
         int posicionAceptacion = posicionCounter - 1;

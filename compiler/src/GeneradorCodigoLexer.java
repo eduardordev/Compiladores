@@ -79,7 +79,7 @@ public class GeneradorCodigoLexer {
         writer.write("}\n");
 
         writer.close();
-        System.out.println("✅ Lexer generado en: " + nombreArchivo + ".java");
+        System.out.println("Lexer generado en: " + nombreArchivo + ".java");
     }
 
     private static String generarCondicionesFinales(AFDConstructor.AFD afd) {

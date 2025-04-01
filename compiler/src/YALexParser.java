@@ -96,20 +96,19 @@ public class YALexParser {
         return rules;
     }
 
-    // Expande rangos de caracteres dentro de conjuntos como [a-zA-Z]
     public String expandirConjuntos(String regex) {
         StringBuilder resultado = new StringBuilder();
         boolean dentroDeSet = false;
         List<Character> charsEnSet = new ArrayList<>();
-
+    
         for (int i = 0; i < regex.length(); i++) {
             char actual = regex.charAt(i);
-
+    
             // Ignorar comillas simples
             if (actual == '\'') {
                 continue;
             }
-
+    
             if (actual == '[') {
                 dentroDeSet = true;
                 charsEnSet.clear();
@@ -123,7 +122,11 @@ public class YALexParser {
                 }
                 resultado.append("(").append(expandido).append(")");
             } else if (dentroDeSet) {
-                // Si es un rango: p.ej. 0-9
+                // Ignorar la coma dentro de un conjunto
+                if (actual == ',') {
+                    continue;
+                }
+                // Si es un rango: por ejemplo, 0-9
                 if (i + 2 < regex.length() && regex.charAt(i + 1) == '-' && regex.charAt(i + 2) != ']') {
                     char desde = actual;
                     char hasta = regex.charAt(i + 2);
@@ -138,9 +141,10 @@ public class YALexParser {
                 resultado.append(actual);
             }
         }
-
+    
         return resultado.toString();
     }
+    
 
 
     public String expandirLiteralSiEsNecesario(String regex) {

@@ -1,0 +1,8 @@
+Este es un archivo de prueba para evaluar la complejidad alta del lexer.
+Token: IDENTIFIER, valor: "variable1"
+Token: NUMBER, valor: 123
+Token: OPERATOR, valor: "+"
+Token: IDENTIFIER, valor: "variable2"
+Token: DELIMITER, valor: ";"
+Linea con caracteres especiales: !@#$%^&*()_+{}:"<>?
+Final de prueba.

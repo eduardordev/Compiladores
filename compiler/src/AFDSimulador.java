@@ -53,8 +53,8 @@ public class AFDSimulador {
                 tokens.add(new ResultadoToken(lexema, tokenId));
                 i = finLexema;
             } else {
-                System.err.println("❌ Error léxico en posición " + i + ": '" + entrada.charAt(i) + "'");
-                i++; // opcional: podrías lanzar excepción o marcar el error
+                System.err.println("Error léxico en posición " + i + ": '" + entrada.charAt(i) + "'");
+                i++; 
             }
         }
 

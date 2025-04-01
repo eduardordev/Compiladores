@@ -30,20 +30,20 @@ public class Main {
                 try {
                     // Expansión de conjuntos (como [a-z])
                     String expandida = parser.expandirConjuntos(regla.regex);
-                    System.out.println("\n🔍 Regla #" + (i + 1));
-                    System.out.println("📌 Original: " + regla.regex);
-                    System.out.println("📐 Expandida: " + expandida);
+                    System.out.println("Regla #" + (i + 1));
+                    System.out.println("Original: " + regla.regex);
+                    System.out.println("Expandida: " + expandida);
 
                     String regexLiteralExpandida = parser.expandirLiteralSiEsNecesario(expandida);
                     String regexPostfija = thompson.convertirPostfija(regexLiteralExpandida);
-                    System.out.println("📤 Postfija: " + regexPostfija);
+                    System.out.println("Postfija: " + regexPostfija);
 
                     AFN afn = thompson.construirDesdePostfijo(regexPostfija);
                     afns.add(new AFNCombiner.AFNToken(afn, regla.priority));
                     acciones.put(regla.priority, regla.action);
 
                 } catch (Exception ex) {
-                    System.err.println("❌ Error en regla #" + (i + 1) + ": " + regla.regex);
+                    System.err.println("Error en regla #" + (i + 1) + ": " + regla.regex);
                     ex.printStackTrace();
                     return; // Detenemos todo para depurar
                 }
@@ -74,15 +74,15 @@ public class Main {
 
             try {
                 String input = new String(Files.readAllBytes(Paths.get("prueba-complejidad-alta.txt")));
-                System.out.println("\n📥 Entrada:\n" + input);
-                System.out.println("\n📤 Tokens reconocidos:");
+                System.out.println("\n Entrada:\n" + input);
+                System.out.println("\n Tokens reconocidos:");
                 //LexerGenerado.getTokens(input);
             } catch (IOException e) {
-                System.err.println("❌ No se pudo leer el archivo de prueba: " + e.getMessage());
+                System.err.println("No se pudo leer el archivo de prueba: " + e.getMessage());
             }
 
         } catch (Exception e) {
-            System.err.println("❌ Error general: " + e.getMessage());
+            System.err.println("Error general: " + e.getMessage());
             e.printStackTrace();
         }
     }

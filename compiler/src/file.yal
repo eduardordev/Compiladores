@@ -1,10 +1,8 @@
-
-
 let digit     = ['0'-'9']
-let letter    = ['a'-'z''A'-'Z']
+let letter    = ['a'-'z', 'A'-'Z']       // Se agrega la coma para separar ambos rangos
 let digits    = digit+
 let letters   = letter+
-let id        = letter (letter digit)*
+let id        = letter (letter | digit)*   // Se usa unión (|) en lugar de concatenación "letter digit"
 
 rule gettoken =
     // Palabras reservadas
@@ -38,7 +36,7 @@ rule gettoken =
   "!="         { System.out.println("NEQ"); }
   "<"          { System.out.println("LT"); }
   "<="         { System.out.println("LE"); }
-  ">"         { System.out.println("GT"); }
+  ">"          { System.out.println("GT"); }
   ">="         { System.out.println("GE"); }
 
     // Operadores lógicos
@@ -60,7 +58,5 @@ rule gettoken =
   ","          { System.out.println("COMMA"); }
 
     // Ignorar espacios, tabulaciones y retorno de carro
-  [' ' '\t' '\r'] { }
+  [' ', '\t', '\r'] { }
   ['\n']       { System.out.println("EOL"); }
-
-
