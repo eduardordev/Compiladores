@@ -1,6 +1,8 @@
+// AFDConstructor.java
 import java.util.*;
 
 public class AFDConstructor {
+
     public static class AFD {
         public Set<Integer> estadosFinales = new HashSet<>();
         public Map<String, Integer> estadoTokenMap = new HashMap<>();
@@ -15,6 +17,7 @@ public class AFDConstructor {
         Queue<Set<Estado>> cola = new LinkedList<>();
         AFD afd = new AFD();
 
+        // Estado inicial del AFD
         Set<Estado> inicial = eClosure(Set.of(afn.inicio));
         int idInicial = estadoId++;
         estadoMap.put(inicial, idInicial);
@@ -25,8 +28,11 @@ public class AFDConstructor {
             Set<Estado> actual = cola.poll();
             int idActual = estadoMap.get(actual);
 
-            Map<Character, Set<Estado>> movimientos = new HashMap<>();
+            // --- NUEVO: garantizar que incluso sin salidas quede registrado ---
+            afd.transiciones.computeIfAbsent(idActual, k -> new HashMap<>());
 
+            // Recolectar movimientos por símbolo
+            Map<Character, Set<Estado>> movimientos = new HashMap<>();
             for (Estado e : actual) {
                 for (Map.Entry<Character, List<Estado>> entry : e.transiciones.entrySet()) {
                     char c = entry.getKey();
@@ -36,23 +42,24 @@ public class AFDConstructor {
                 }
             }
 
-            for (char c : movimientos.keySet()) {
-                Set<Estado> cerradura = eClosure(movimientos.get(c));
+            // Para cada símbolo, crear (o reutilizar) el nuevo estado
+            for (Map.Entry<Character, Set<Estado>> mv : movimientos.entrySet()) {
+                char c = mv.getKey();
+                Set<Estado> cerradura = eClosure(mv.getValue());
                 if (!estadoMap.containsKey(cerradura)) {
                     estadoMap.put(cerradura, estadoId++);
                     cola.add(cerradura);
                 }
-
-                afd.transiciones
-                        .computeIfAbsent(idActual, k -> new HashMap<>())
-                        .put(c, estadoMap.get(cerradura));
+                int idDestino = estadoMap.get(cerradura);
+                afd.transiciones.get(idActual).put(c, idDestino);
             }
 
-            // Si algún estado es de aceptación, registrar
+            // Si alguno de los NFA originales en 'actual' es de aceptación,
+            // marcamos idActual como final y guardamos su tokenId
             for (Estado e : actual) {
                 if (e.id < 0) {
                     afd.estadosFinales.add(idActual);
-                    afd.estadoTokenMap.put("q" + idActual, -1 * e.id); // token ID positivo
+                    afd.estadoTokenMap.put("q" + idActual, -1 * e.id);
                     break;
                 }
             }
@@ -69,8 +76,7 @@ public class AFDConstructor {
         while (!stack.isEmpty()) {
             Estado e = stack.pop();
             for (Estado next : e.epsilonTransiciones) {
-                if (!resultado.contains(next)) {
-                    resultado.add(next);
+                if (resultado.add(next)) {
                     stack.push(next);
                 }
             }

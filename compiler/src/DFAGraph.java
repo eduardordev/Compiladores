@@ -1,72 +1,75 @@
+// DFAGraph.java
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class DFAGraph {
+
     public static void generarDOT(AFDConstructor.AFD afd, String nombreArchivo) {
         StringBuilder dot = new StringBuilder();
         dot.append("digraph AFD {\n");
         dot.append("  rankdir=LR;\n");
         dot.append("  __start [shape=none,label=\"\"];\n");
 
-        // Nodos del AFD
-        for (int estado : afd.transiciones.keySet()) {
-            boolean esFinal = afd.estadosFinales.contains(estado);
-            dot.append("  q").append(estado)
-                    .append(" [shape=").append(esFinal ? "doublecircle" : "circle")
-                    .append(", label=\"q").append(estado).append("\"];\n");
+        // --- Recolectar TODOS los nodos: inicial, finales, orígenes y destinos ---
+        Set<Integer> nodos = new LinkedHashSet<>();
+        nodos.add(afd.estadoInicial);
+        nodos.addAll(afd.estadosFinales);
+        nodos.addAll(afd.transiciones.keySet());
+        for (Map<Character, Integer> m : afd.transiciones.values()) {
+            nodos.addAll(m.values());
         }
 
-        // Flecha inicial
-        dot.append("  __start -> q").append(afd.estadoInicial).append(";\n");
+        // Dibujar cada nodo con su forma (doublecircle si es final)
+        for (int estado : nodos) {
+            boolean esFinal = afd.estadosFinales.contains(estado);
+            String shape = esFinal ? "doublecircle" : "circle";
+            dot.append(String.format("  q%d [shape=%s,label=\"q%d\"];\n", estado, shape, estado));
+        }
 
-        // Transiciones
+        // Flecha al estado inicial
+        dot.append(String.format("  __start -> q%d;\n", afd.estadoInicial));
+
+        // Dibujar transiciones existentes
         for (Map.Entry<Integer, Map<Character, Integer>> entrada : afd.transiciones.entrySet()) {
             int origen = entrada.getKey();
             for (Map.Entry<Character, Integer> trans : entrada.getValue().entrySet()) {
                 char simbolo = trans.getKey();
                 int destino = trans.getValue();
 
-                // Escape seguro del símbolo para el label
-                String etiquetaEscapada = switch (simbolo) {
-                    case '"' -> "\\\"";
-                    case '\\' -> "\\\\";
-                    case '\n' -> "\\n";
-                    case '\t' -> "\\t";
-                    default -> String.valueOf(simbolo);
-                };
+                // Escapar caracteres especiales
+                String label;
+                switch (simbolo) {
+                    case '"'  -> label = "\\\"";
+                    case '\\' -> label = "\\\\";
+                    case '\n' -> label = "\\n";
+                    case '\t' -> label = "\\t";
+                    default   -> label = String.valueOf(simbolo);
+                }
 
-                dot.append("  q").append(origen)
-                        .append(" -> q").append(destino)
-                        .append(" [label=\"").append(etiquetaEscapada).append("\"];\n");
+                dot.append(String.format("  q%d -> q%d [label=\"%s\"];\n", origen, destino, label));
             }
         }
 
         dot.append("}\n");
 
-        // Escribir el archivo .dot
+        // Escribir el .dot y generar PNG usando Graphviz
         try (FileWriter writer = new FileWriter(nombreArchivo + ".dot")) {
             writer.write(dot.toString());
-            System.out.println("Archivo DOT generado: " + nombreArchivo + ".dot");
         } catch (IOException e) {
-            System.err.println("Error al escribir el archivo DOT: " + e.getMessage());
+            System.err.println("Error al escribir " + nombreArchivo + ".dot: " + e.getMessage());
             return;
         }
 
-        // Ejecutar Graphviz para generar PNG
         try {
             ProcessBuilder pb = new ProcessBuilder("dot", "-Tpng", nombreArchivo + ".dot", "-o", nombreArchivo + ".png");
             pb.redirectErrorStream(true);
-            Process proceso = pb.start();
-            int exitCode = proceso.waitFor();
-            if (exitCode == 0) {
-                System.out.println("Imagen PNG generada: " + nombreArchivo + ".png");
-            } else {
-                System.err.println("Error al ejecutar Graphviz. Código: " + exitCode);
+            Process p = pb.start();
+            if (p.waitFor() != 0) {
+                System.err.println("Graphviz devolvió código de error al generar PNG.");
             }
         } catch (IOException | InterruptedException e) {
-            System.err.println("Error al generar imagen PNG: " + e.getMessage());
+            System.err.println("Error al ejecutar Graphviz: " + e.getMessage());
         }
     }
 }

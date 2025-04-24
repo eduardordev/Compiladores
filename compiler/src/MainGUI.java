@@ -16,6 +16,8 @@ public class MainGUI extends JFrame {
 
     private JTextField fileField;
     private JTextField lexerNameField;
+    private JTextField testFileField;           // Campo para el archivo de prueba
+    private JButton testFileBrowseButton;         // Botón para seleccionar el txt
     private JTextArea logArea;
     private ZoomableImagePanel zoomPanel;
     private JSlider zoomSlider;
@@ -25,7 +27,7 @@ public class MainGUI extends JFrame {
     private JTabbedPane tabbedPane;
 
     public MainGUI() {
-        setTitle("Generador de Lexer - Interfaz Moderna");
+        setTitle("Generador de Lexer");
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -87,12 +89,29 @@ public class MainGUI extends JFrame {
         inputPanel.add(lexerNameField, gbc);
         gbc.gridwidth = 1;
 
-        // Botón para generar el Lexer
+        // Archivo de Prueba (TXT)
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        JLabel testFileLabel = new JLabel("Archivo de Prueba:");
+        testFileLabel.setForeground(new Color(0, 70, 140));
+        inputPanel.add(testFileLabel, gbc);
+
+        testFileField = new JTextField();
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        inputPanel.add(testFileField, gbc);
+
+        testFileBrowseButton = new JButton("Examinar TXT");
+        gbc.gridx = 2;
+        gbc.weightx = 0;
+        inputPanel.add(testFileBrowseButton, gbc);
+
+        // Botón para generar el Lexer (fila 3)
         generateButton = new JButton("Generar Lexer");
         generateButton.setBackground(new Color(100, 149, 237));
         generateButton.setForeground(Color.WHITE);
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.gridwidth = 3;
         inputPanel.add(generateButton, gbc);
         gbc.gridwidth = 1;
@@ -110,7 +129,7 @@ public class MainGUI extends JFrame {
         // Pestaña para visualización de imagen
         JPanel imagePanel = new JPanel(new BorderLayout());
         imagePanel.setBackground(Color.WHITE);
-        
+
         // Usamos ZoomableImagePanel para mostrar la imagen con zoom y pan
         zoomPanel = new ZoomableImagePanel();
         JScrollPane scrollPaneImage = new JScrollPane(zoomPanel);
@@ -148,6 +167,7 @@ public class MainGUI extends JFrame {
 
         // Acciones de los botones
         browseButton.addActionListener(e -> chooseFile());
+        testFileBrowseButton.addActionListener(e -> chooseTestFile());
         generateButton.addActionListener(e -> generateLexer());
     }
 
@@ -180,23 +200,39 @@ public class MainGUI extends JFrame {
     }
 
     /**
+     * Muestra un JFileChooser para seleccionar el archivo de prueba TXT.
+     */
+    private void chooseTestFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(MainGUI.this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            testFileField.setText(selectedFile.getAbsolutePath());
+        }
+    }
+
+    /**
      * Valida la entrada y ejecuta la generación del lexer en un hilo aparte.
      */
     private void generateLexer() {
         String archivoYal = fileField.getText().trim();
         String nombreLexer = lexerNameField.getText().trim();
+        String testFilePath = testFileField.getText().trim();
 
         if (archivoYal.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Ingresa el archivo YAL.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        // Validar nombre de la clase
         if (!isValidJavaIdentifier(nombreLexer)) {
             JOptionPane.showMessageDialog(this,
                     "El nombre del lexer no es un identificador Java válido.\n" +
-                    "Debe iniciar con letra o subrayado y solo contener letras, dígitos o subrayados.",
+                            "Debe iniciar con letra o subrayado y solo contener letras, dígitos o subrayados.",
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (testFilePath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Ingresa el archivo de prueba.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -245,42 +281,42 @@ public class MainGUI extends JFrame {
             YALexParser parser = new YALexParser();
             parser.parse(archivoYal);
             List<YALexParser.TokenRule> reglas = parser.getRules();
-    
+
             // Paso 2: Construir un AFN por regla
             ThompsonConstructor thompson = new ThompsonConstructor();
             List<AFNCombiner.AFNToken> afns = new ArrayList<>();
             Map<Integer, String> acciones = new HashMap<>();
-    
+
             for (int i = 0; i < reglas.size(); i++) {
                 YALexParser.TokenRule regla = reglas.get(i);
                 try {
-                    String expandida = parser.expandirConjuntos(regla.regex);
+                    String expandida = parser.expandirConjuntos(regla.RegexNative);
                     System.out.println("Regla #" + (i + 1));
-                    System.out.println("Original: " + regla.regex);
+                    System.out.println("Original: " + regla.RegexNative);
                     System.out.println("Expandida: " + expandida);
-    
+
                     String regexLiteralExpandida = parser.expandirLiteralSiEsNecesario(expandida);
                     String regexPostfija = thompson.convertirPostfija(regexLiteralExpandida);
                     System.out.println("Postfija: " + regexPostfija);
-    
+
                     AFN afn = thompson.construirDesdePostfijo(regexPostfija);
                     afns.add(new AFNCombiner.AFNToken(afn, regla.priority));
                     acciones.put(regla.priority, regla.action);
                 } catch (Exception ex) {
-                    System.err.println("Error en regla #" + (i + 1) + ": " + regla.regex);
+                    System.err.println("Error en regla #" + (i + 1) + ": " + regla.RegexNative);
                     ex.printStackTrace();
                     return;
                 }
             }
-    
+
             // Paso 3: Combinar AFNs
             AFNCombiner combinador = new AFNCombiner();
             AFN afnCombinado = combinador.combinarAFNs(afns);
-    
+
             // Paso 4: Convertir a AFD
             AFDConstructor afdConstructor = new AFDConstructor();
             AFDConstructor.AFD afd = afdConstructor.convertirAFNtoAFD(afnCombinado);
-    
+
             // Paso 5: Generar el Lexer Java
             GeneradorCodigoLexer.generarLexer(
                     nombreLexer,
@@ -289,16 +325,16 @@ public class MainGUI extends JFrame {
                     parser.getHeader(),
                     parser.getTrailer()
             );
-    
+
             // Paso 6: Generar gráfica del AFD (archivo DOT)
             DFAGraph.generarDOT(afd, nombreLexer + "_AFD");
-    
+
             // Convertir el archivo DOT a PNG usando Graphviz
             generateDotToPng(nombreLexer);
-    
-            // Paso 7: Probar el lexer con un archivo de entrada real
-            System.out.println("\n🔍 Analizando archivo: prueba-complejidad-alta.txt");
-            File testFile = new File("prueba-complejidad-alta.txt");
+
+            // Paso 7: Probar el lexer con el archivo de entrada real seleccionado
+            System.out.println("\n Analizando archivo de prueba: " + testFileField.getText().trim());
+            File testFile = new File(testFileField.getText().trim());
             if (testFile.exists()) {
                 try {
                     String input = new String(Files.readAllBytes(testFile.toPath()));
@@ -324,17 +360,17 @@ public class MainGUI extends JFrame {
             e.printStackTrace();
         }
     }
-    
+
     /**
      * Genera la imagen PNG a partir del archivo DOT utilizando Graphviz.
      * @param nombreLexer El nombre base del archivo DOT y PNG.
      */
     private void generateDotToPng(String nombreLexer) {
         // Si no deseas usar "dot" directamente, reemplaza "dot" con la ruta completa, por ejemplo "C:\\Program Files\\Graphviz\\bin\\dot.exe"
-        String dotCommand = "dot"; 
+        String dotCommand = "dot";
         String dotFile = nombreLexer + "_AFD.dot";
         String pngFile = nombreLexer + "_AFD.png";
-        
+
         try {
             Process process = Runtime.getRuntime().exec(new String[]{dotCommand, "-Tpng", dotFile, "-o", pngFile});
             int exitCode = process.waitFor();
@@ -347,21 +383,23 @@ public class MainGUI extends JFrame {
             System.err.println("Error al generar imagen PNG: " + e.getMessage());
         }
     }
-    
+
     /**
      * Compila un archivo Java utilizando el compilador del sistema.
      * @param filePath Ruta del archivo .java a compilar.
      */
     private void compileJavaFile(String filePath) throws IOException {
         javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
-        int result = compiler.run(null, null, null, filePath);
+        // Indicamos "-d src" para que el .class generado se coloque en el directorio src/
+        int result = compiler.run(null, null, null, "-d", "src", filePath);
         if (result != 0) {
             System.err.println("Error al compilar " + filePath);
         } else {
             System.out.println("Compilación exitosa de " + filePath);
         }
     }
-    
+
+
     /**
      * Intenta cargar y mostrar la imagen generada del AFD.
      * Se espera que la imagen se guarde como "[nombreLexer]_AFD.png".

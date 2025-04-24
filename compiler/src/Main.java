@@ -29,9 +29,9 @@ public class Main {
 
                 try {
                     // Expansión de conjuntos (como [a-z])
-                    String expandida = parser.expandirConjuntos(regla.regex);
+                    String expandida = parser.expandirConjuntos(regla.RegexNative);
                     System.out.println("Regla #" + (i + 1));
-                    System.out.println("Original: " + regla.regex);
+                    System.out.println("Original: " + regla.RegexNative);
                     System.out.println("Expandida: " + expandida);
 
                     String regexLiteralExpandida = parser.expandirLiteralSiEsNecesario(expandida);
@@ -43,7 +43,7 @@ public class Main {
                     acciones.put(regla.priority, regla.action);
 
                 } catch (Exception ex) {
-                    System.err.println("Error en regla #" + (i + 1) + ": " + regla.regex);
+                    System.err.println("Error en regla #" + (i + 1) + ": " + regla.RegexNative);
                     ex.printStackTrace();
                     return; // Detenemos todo para depurar
                 }
