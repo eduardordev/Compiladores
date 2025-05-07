@@ -1,0 +1,14 @@
+111 13 
+555 6662 
+80 23 542
+12 34 56
+78 90 12
+34 56 78
+90 12 34
+56 78 90
+IF FOR WHILE
++ * - /
+( ) abbcc aabbcc
+asbbccsscc bbbsssasw
+
+IDENTIFICADOR1
