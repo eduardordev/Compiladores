@@ -6,9 +6,6 @@
 let delim = [' ''\t''\n']
 let ws = delim+
 
-(* Primer token: expresión regular que solo acepte letras *)
-let letter = ['a'-'z' 'A'-'Z']
-
 (* Segundo token: expresión regular que acepte números *)
 let digit = ['0'-'9']
 
@@ -21,17 +18,26 @@ let sign = ['+'|'-']
 (* Octavo token: hacer un número *)
 let number = (sign)digits(,digits)
 
-(* Quinto token: caracter final *)
-let endline = [xyz]
+(* token: expresión regular que solo acepte letras *)
+let letter = ['a'-'z' 'A'-'Z']
 
-(* Sexto token: hacer un identificador *)
-let id = letter(letter|digits)*endline
+(* Noveno token: expresión regular que acepte identificadores *)
+let id = letter(letter|digits)*
 
-(* El token que detecta las cadenas de caracteres (esta puede estar compuesta por letras, números o espacios en blanco) *)
-let string = "(letter|digit| )+"
+(* Definiendo las letras *)
 
-(* La sección de {trailer} es opcional *)
-rule rule gettoken =
+(* Definiendo las letras *)
+let letterh = ['A'-'F']
+let lettersh = letterh+
+
+(* Definiendo los números *)
+let digite = ['0'-'9']
+let digitse = digite+
+
+(* Definiendo los números *)
+let hexdigit = ((letterh)(digitse))|((digitse)(letterh))*
+
+rule gettoken = 
     "IF" {return "IF"}
     | "FOR" {return "FOR"}
     | "+" {return "SUMA"}
@@ -40,7 +46,10 @@ rule rule gettoken =
     | "/" {return "DIVISION"}
     | "(" {return "PARENTESIS_IZQUIERDO"}
     | ")" {return "PARENTESIS_DERECHO"}
+    | "^" {return "POTENCIA"}
     | digits {return "DÍGITO"}
     | number {return "NÚMERO CON DECIMAL"}
+    | hexdigit {return "NÚMERO HEXADECIMAL"}
     | id {return "IDENTIFICADOR"}
-    | string {return "STRING"}
+
+(* La sección de {trailer} es opcional *)
