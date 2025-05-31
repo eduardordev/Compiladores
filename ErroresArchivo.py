@@ -27,10 +27,11 @@ VALID_SYMBOLS = set(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789"
     # operadores y símbolos de regex
-    "()[]*+?|ε\\-,./\"@~≡¥§"
+    "()[]*+?|ε\\-,./\"@~≡¥§!$"
     # espacios y controles
     " \t\n"
 )
+
 def contains_only_valid_characters(exp):
     return all(c in VALID_SYMBOLS for c in exp)
 

@@ -562,7 +562,9 @@ class SintaxT:
                     if a == "§": # Símbolo de \n.
                         a = "\yn"
 
-                    grafo.edge(str(estado), str(trans), label=a)
+                    safe_label = a.replace("\\", "\\\\").replace("\"", "\\\"")
+                    grafo.edge(str(estado), str(trans), label=safe_label)
+
 
         # Dibujando los estados del AFD.
         for esta in self.estadosAFD:

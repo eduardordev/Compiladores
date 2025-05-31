@@ -37,6 +37,15 @@ let digitse = digite+
 (* Definiendo los números *)
 let hexdigit = ((letterh)(digitse))|((digitse)(letterh))*
 
+
+(* Caracteres escapados para comillas y barra invertida *)  
+let escapado = "\\\\" | "\\\""  
+(* Caracter válido en cadenas: letra, dígito, espacio o escapado *)  
+let char     = letter  | digit  | " " | escapado  
+(* Definición de cadenas de texto *)  
+let string = "\"([^\"\\]|\\.)*\"" | "!\\$"
+
+
 rule gettoken = 
     "IF" {return "IF"}
     | "FOR" {return "FOR"}
@@ -51,5 +60,8 @@ rule gettoken =
     | number {return "NÚMERO CON DECIMAL"}
     | hexdigit {return "NÚMERO HEXADECIMAL"}
     | id {return "IDENTIFICADOR"}
+    | string {return "STRING"}  
+    | "!$".* { return "COMMENT" }  
+
 
 (* La sección de {trailer} es opcional *)

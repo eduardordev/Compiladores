@@ -27,7 +27,7 @@ VALID_SYMBOLS = set(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "0123456789"
     # operadores y símbolos de regex
-    "()[]*+?|ε\\-,./\"@~≡¥§"
+    "!$()[]*+?|ε\\-,./\"@~≡¥§"
     # espacios y controles
     " \t\n"
 )

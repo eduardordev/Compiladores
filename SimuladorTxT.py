@@ -97,7 +97,7 @@ class SimuladorTxT:
                             self.cad_s.append(cadena.strip())
                             self.cads.append(linea.strip())
                         else:
-                            self.cad_s.extend(cadena.split())
+                            self.cad_s.append(cadena)
                             self.cads.append(linea.strip())
                     # Agregando los tokens a la lista global tokens.
                     self.t.extend(cadenas)

@@ -19,28 +19,32 @@ def format_regex(regex):
     """
     Transforma una expresión regular insertando el operador de concatenación '.' explícitamente.
     """
-    res = ''
-    all_operators = set(['|', '?', '+', '*', '^'])
-    binary_operators = set(['^', '|'])
+    res = ""
+    all_operators = {'*', '|', '+', '?'}
+    binary_operators = {'*', '+', '?', '|', '.'}
+    
+    i = 0
+    while i < len(regex):
+        if regex[i] == '\\' and i + 1 < len(regex):
+            c1 = regex[i] + regex[i+1]
+            i += 2
+        else:
+            c1 = regex[i]
+            i += 1
 
-    for i in range(len(regex)):
-        c1 = regex[i]
-
-        if i + 1 < len(regex):
-            c2 = regex[i + 1]
+        if i < len(regex):
+            if regex[i] == '\\' and i + 1 < len(regex):
+                c2 = regex[i] + regex[i+1]
+            else:
+                c2 = regex[i]
 
             res += c1
 
             if c1 != '(' and c2 != ')' and c2 not in all_operators and c1 not in binary_operators:
                 res += '.'
+        else:
+            res += c1
 
-    res += regex[-1]
-
-    # Si hay un +, se copia la expresión regular anterior y se le agrega el operador de cerradura de Kleene.
-    if "+" in res:
-        res = res.replace("+", "")
-        res = res + "." + res + "*"
-        print("Res: ", res)
     return res
 
 
