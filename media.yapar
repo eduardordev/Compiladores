@@ -1,0 +1,29 @@
+/* INICIA Sección de TOKENS */
+%token IF FOR SUMA RESTA MULTIPLICACION DIVISION
+%token PARENTESIS_IZQUIERDO PARENTESIS_DERECHO POTENCIA
+%token DIGITO NUMERO_DECIMAL NUMERO_HEXADECIMAL IDENTIFICADOR
+%token WS
+IGNORE WS
+/* FINALIZA Sección de TOKENS */
+
+%%
+
+expresion:
+    termino
+  | expresion SUMA termino
+  | expresion RESTA termino
+;
+
+termino:
+    factor
+  | termino MULTIPLICACION factor
+  | termino DIVISION factor
+;
+
+factor:
+    DIGITO
+  | NUMERO_DECIMAL
+  | NUMERO_HEXADECIMAL
+  | IDENTIFICADOR
+  | PARENTESIS_IZQUIERDO expresion PARENTESIS_DERECHO
+;

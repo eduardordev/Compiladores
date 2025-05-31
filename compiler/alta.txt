@@ -1,0 +1,8 @@
+aaxyz
+aa13xyz
+bbbs bxyz
++1,4 11 13
+IF FOR
++1,6 +12,5 +11,8 +100,2 +1000,5 -11,3
+-12,6 -1,7 -1,9 -100,4 -1000,6
+"hola 3" "goooooooooooa 2222222222" "hhhhh asadfsd fsssdf as"

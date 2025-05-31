@@ -1,0 +1,46 @@
+(* La sección {header} es opcional *)
+
+(* Definiendo los tokens a usar en este archivo *)
+
+(* Definiendo el break de línea *)
+let delim = [' ''\t''\n']
+let ws = delim+
+
+(* Segundo token: expresión regular que acepte números *)
+let digit = ['0'-'9']
+
+(* Tercer token: hacer un digito *)
+let digits = digit+
+
+(* Séptimo token: hacer los signos *)
+let sign = ['+'|'-']
+
+(* Octavo token: hacer un número *)
+let number = (sign)digits(,digits)
+
+(* Definiendo las letras *)
+
+(* Definiendo las letras *)
+let letterh = ['A'-'F']
+let lettersh = letterh+
+
+(* Definiendo los números *)
+let digite = ['0'-'9']
+let digitse = digite+
+
+(* Definiendo los números *)
+let hexdigit = ((letterh)(digitse))|((digitse)(letterh))*
+
+rule gettoken = 
+     "+" {return "SUMA"}
+    | "-" {return "RESTA"}
+    | "*" {return "MULTIPLICACION"}
+    | "/" {return "DIVISION"}
+    | "(" {return "PARENTESIS_IZQUIERDO"}
+    | ")" {return "PARENTESIS_DERECHO"}
+    | "^" {return "POTENCIA"}
+    | digits {return "DÍGITO"}
+    | number {return "NÚMERO CON DECIMAL"}
+    | hexdigit {return "NÚMERO HEXADECIMAL"}
+
+(* La sección de {trailer} es opcional *)
