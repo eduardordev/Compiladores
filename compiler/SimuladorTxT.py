@@ -1,3 +1,29 @@
+def dividir_linea(linea):
+    """
+    Divide una línea en partes según operadores y palabras reservadas.
+    """
+    operadores = ['(', ')', '*', '+', '-', '/']
+    partes = []
+    palabra = ''
+
+    for caracter in linea:
+        if caracter.isalnum() or caracter == '_':
+            palabra += caracter
+        elif caracter in operadores:
+            if palabra:
+                partes.append(palabra)
+                palabra = ''
+            partes.append(caracter)
+        else:
+            if palabra:
+                partes.append(palabra)
+                palabra = ''
+
+    if palabra:
+        partes.append(palabra)
+
+    return partes
+
 class SimuladorTxT:
 
     def __init__(self, diccionarios, iniciales, finales, archivo, reservadas=[], operadores_reservados=[], tokens=[], tabla={}):
@@ -84,31 +110,15 @@ class SimuladorTxT:
 
         with open(self.archivo, "r") as archivo:
             for linea in archivo:
+                linea = linea.strip()
+                if not linea:
+                    continue
                 # Si la cadena empieza y termina con "", no se separa.
                 if linea[0] == '"' and linea[-1] == '"':
-                    self.cad_s.append(linea.strip())
-                    self.cads.append(linea.strip())
+                    self.cad_s.append(linea)
                 else:
-                    # Eliminando saltos de línea y separando las cadenas.
-                    cadenas = linea.strip().split()
-                    # Agregando las cadenas a la lista global cad_s.
-                    for cadena in cadenas:
-                        if cadena[0] == '"' and cadena[-1] == '"':
-                            self.cad_s.append(cadena.strip())
-                            self.cads.append(linea.strip())
-                        else:
-                            self.cad_s.extend(cadena.split())
-                            self.cads.append(linea.strip())
-                    # Agregando los tokens a la lista global tokens.
-                    self.t.extend(cadenas)
-
-                    self.cads.extend(linea.strip())
-
-                    # Regresar las cadenas separadas a self.cad_s.
-                    self.cad_s.extend(cadenas)
-        
-        # print("self.t: ", self.t)
-        # print("self.cad_s: ", self.cad_s)
+                    partes = dividir_linea(linea)
+                    self.cad_s.extend(partes)
 
         resultados_txt = self.simular_cadenas(diccionarios, iniciales, finales, resultado=[])
 
@@ -833,7 +843,7 @@ def simular_res(): # Simulando otras cosas.
 
     print("Diccionario: ", diccionario)    
     
-    new_dict =  vacio2
+    new_dict = vacio2
 
     for k, v in diccionario.items():
         if not isinstance(v, bool):
