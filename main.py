@@ -86,9 +86,10 @@ with open(yal_path, "r", encoding='utf-8') as file:
         # Iterando sobre la lista de tokens y agregándolos al diccionario.
         for token in lista_tokens:
             # Extrayendo el nombre del token y su valor.
-            nombre, valor = token.split("return")
-            # Agregando el token al diccionario.
-            diccionario_tokens[nombre.strip()] = valor.strip().strip("\"")
+            if "return" in token:
+                nombre, valor = token.split("return")
+                # Agregando el token al diccionario.
+                diccionario_tokens[nombre.strip()] = valor.strip().strip("\"")
         # Imprimiendo el diccionario con los tokens.
         #print(diccionario_tokens)
 
@@ -442,8 +443,14 @@ with open(yal_path, "r", encoding='utf-8') as file:
     SimuladorTxT(lista_diccionarios, lista_iniciales, lista_finales, archivo, res_list, operadores_reservados, tokens, tabla)
 
     simulador = SimuladorTxT(diccionarios, iniciales, finales, archivo, reservadas, operadores_reservados, tokens, tabla)
-    tokens_parser = simulador.get_tokens_for_parser()
-    parse_from_tokens(tokens_parser, yapar_path)
+    tokens_parser = simulador.get_tokens_for_parser()  # Debe ser lista de listas
+
+    for i, tokens_line in enumerate(tokens_parser, 1):
+        try:
+            parse_from_tokens(tokens_line, yapar_path)
+            print(f"✔ Línea {i} válida")
+        except Exception as e:
+            print(f"❌ Línea {i} inválida: {e}")
 
     print("[main.py] Creando YaparParser...")
     # Después de crear el parser, imprime el resumen de la gramática

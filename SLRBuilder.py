@@ -47,6 +47,10 @@ class SLRBuilder:
         self.grammar[self.augmented_start] = [[self.start_symbol]]
         self.start_symbol = self.augmented_start
         self.non_terminals.add(self.augmented_start)
+        print("[SLRBuilder] Gramática aumentada:")
+        for head, prods in self.grammar.items():
+            for prod in prods:
+                print(f"  {head} -> {' '.join(prod)}")
 
     def closure(self, items):
         closure_set = set(items)
@@ -60,7 +64,7 @@ class SLRBuilder:
                     if symbol in self.grammar:
                         for prod in self.grammar[symbol]:
                             new_item = LR0Item(symbol, prod, 0)
-                            if new_item not in closure_set:
+                            if new_item not in closure_set and new_item not in new_items:
                                 new_items.add(new_item)
             if new_items:
                 closure_set.update(new_items)
@@ -93,6 +97,9 @@ class SLRBuilder:
                     self.states.append(new_state)
                     pending.append(new_state)
                 self.transitions[(current_index, symbol)] = state_map[key]
+        print("[SLRBuilder] Estado 0:")
+        for item in self.states[0]:
+            print(f"  {item}")
 
     def _state_key(self, state):
         return frozenset(state)

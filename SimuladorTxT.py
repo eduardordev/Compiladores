@@ -93,7 +93,7 @@ class SimuladorTxT:
                     # Separar usando expresiones regulares para separar operadores y paréntesis
                     import re
                     # Expresión: separa números, identificadores y operadores/paréntesis
-                    partes = re.findall(r'\d+|[a-zA-Z_]\w*|[()+\-*/]', linea.strip())
+                    partes = separar_tokens(linea.strip())
                     for cadena in partes:
                         self.cad_s.append(cadena)
                         self.cads.append(linea.strip())
@@ -692,53 +692,110 @@ if __name__ == "__main__":
             f.write(datas)
             
     def get_tokens_for_parser(self):
-        """Devuelve los tokens válidos como tuplas (TOKEN_NAME, valor), listos para el parser."""
+        """
+        Devuelve los tokens válidos como tuplas (TOKEN_NAME, valor), agrupados por línea.
+        Retorna: [[(TOKEN_NAME, valor), ...], ...]  # Una sublista por línea
+        """
         resultado = []
-        # Mapear el nombre del token al índice del AFD (por el orden en baja.yal)
         token_map = list(self.tabla.keys())
-        print("token_map:", token_map)  # DEPURACIÓN
-        for cadena, valores in self.diccionario_cadenas.items():
-            print("cadena:", cadena, "valores:", valores)  # DEPURACIÓN
-            try:
-                idx = valores.index(True)
-            except ValueError:
-                continue
-            # Usar el nombre del token real según la tabla, no self.tokens
-            if idx < len(token_map):
-                token_name = token_map[idx]
+        # Leer el archivo de entrada para obtener las líneas originales
+        with open(self.archivo, "r", encoding="utf-8") as f:
+            lineas = [line.rstrip('\n') for line in f]
+        # Para cada línea, genera su lista de tokens
+        for linea in lineas:
+            if not linea.strip() or linea.strip().startswith("//"):
+                continue  # Ignora líneas vacías o comentarios
+            tokens_linea = []
+            # Extrae las partes (igual que en el constructor)
+            partes = separar_tokens(linea.strip())
+            for cadena in partes:
+                valores = self.diccionario_cadenas.get(cadena, [])
+                try:
+                    idx = valores.index(True)
+                except ValueError:
+                    continue
+                if idx < len(token_map):
+                    token_name = token_map[idx]
+                else:
+                    continue
+                # Clasificación explícita
+                if token_name in ("digits", "digit", "NUMERO"):
+                    tokens_linea.append(("NUMERO", cadena))
+                elif token_name == "number":
+                    tokens_linea.append(("NÚMERO CON DECIMAL", cadena))
+                elif token_name == "hexdigit":
+                    tokens_linea.append(("NÚMERO HEXADECIMAL", cadena))
+                elif token_name in ("id", "IDENTIFICADOR"):
+                    tokens_linea.append(("IDENTIFICADOR", cadena))
+                elif token_name == "WS":
+                    continue
+                elif cadena == "+":
+                    tokens_linea.append(("SUMA", cadena))
+                elif cadena == "-":
+                    tokens_linea.append(("RESTA", cadena))
+                elif cadena == "*":
+                    tokens_linea.append(("MULTIPLICACION", cadena))
+                elif cadena == "/":
+                    tokens_linea.append(("DIVISION", cadena))
+                elif cadena == "(":
+                    tokens_linea.append(("PARENTESIS_IZQUIERDO", cadena))
+                elif cadena == ")":
+                    tokens_linea.append(("PARENTESIS_DERECHO", cadena))
+                elif cadena.upper() == "IF":
+                    tokens_linea.append(("IF", cadena))
+                elif cadena.upper() == "FOR":
+                    tokens_linea.append(("FOR", cadena))
+                elif cadena.upper() == "WHILE":
+                    tokens_linea.append(("WHILE", cadena))
+                elif token_name == "string":
+                    tokens_linea.append(("STRING", cadena))
+                else:
+                    tokens_linea.append((token_name.upper(), cadena))
+            if tokens_linea:
+                # Solo agrega si hay al menos un token válido
+                resultado.append(tokens_linea)
             else:
-                continue  # Si no se reconoce, ignorar
-            # Clasificación explícita
-            if token_name in ("digits", "digit", "NUMERO"):
-                resultado.append(("NUMERO", cadena))
-            elif token_name == "number":
-                resultado.append(("NÚMERO CON DECIMAL", cadena))
-            elif token_name == "hexdigit":
-                resultado.append(("NÚMERO HEXADECIMAL", cadena))
-            elif token_name in ("id", "IDENTIFICADOR"):
-                resultado.append(("IDENTIFICADOR", cadena))
-            elif token_name == "WS":
-                continue  # Ignorar espacios en blanco
-            elif cadena == "+":
-                resultado.append(("SUMA", cadena))
-            elif cadena == "-":
-                resultado.append(("RESTA", cadena))
-            elif cadena == "*":
-                resultado.append(("MULTIPLICACION", cadena))
-            elif cadena == "/":
-                resultado.append(("DIVISION", cadena))
-            elif cadena == "(":
-                resultado.append(("PARENTESIS_IZQUIERDO", cadena))
-            elif cadena == ")":
-                resultado.append(("PARENTESIS_DERECHO", cadena))
-            elif cadena.upper() == "IF":
-                resultado.append(("IF", cadena))
-            elif cadena.upper() == "FOR":
-                resultado.append(("FOR", cadena))
-            elif cadena.upper() == "WHILE":
-                resultado.append(("WHILE", cadena))
-            elif token_name == "string":
-                resultado.append(("STRING", cadena))
-            else:
-                resultado.append((token_name.upper(), cadena))
+                # Si no hay tokens válidos, agrega un marcador de error para esa línea
+                resultado.append([("ERROR", linea)])
+        print("Tokens enviados al parser:", resultado)
         return resultado
+
+def separar_tokens(linea):
+    """
+    Separa una línea en tokens: números, identificadores, operadores y paréntesis.
+    No usa la librería re.
+    """
+    tokens = []
+    i = 0
+    while i < len(linea):
+        c = linea[i]
+        # Ignorar espacios
+        if c.isspace():
+            i += 1
+            continue
+        # Números
+        if c.isdigit():
+            num = c
+            i += 1
+            while i < len(linea) and linea[i].isdigit():
+                num += linea[i]
+                i += 1
+            tokens.append(num)
+            continue
+        # Identificadores (letra o _ seguido de letras, dígitos o _)
+        if c.isalpha() or c == "_":
+            ident = c
+            i += 1
+            while i < len(linea) and (linea[i].isalnum() or linea[i] == "_"):
+                ident += linea[i]
+                i += 1
+            tokens.append(ident)
+            continue
+        # Operadores y paréntesis
+        if c in "+-*/()":
+            tokens.append(c)
+            i += 1
+            continue
+        # Si no es nada de lo anterior, solo avanza
+        i += 1
+    return tokens

@@ -34,12 +34,15 @@ class YaparParser:
                 if self._starts_with(line, '%token'):
                     tokens = self._split_words(line[6:])
                     self.tokens.update(tokens)
+                elif self._starts_with(line, '%start'):
+                    start = self._split_words(line[6:])
+                    if start:
+                        self.start_symbol = start[0]
                 elif self._starts_with(line, 'IGNORE'):
                     ignored = self._split_words(line[6:])
                     self.ignore_tokens.update(ignored)
-
             elif in_productions:
-                # Ignora líneas vacías o comentarios antes de la primera producción
+                
                 if not found_first_production and (line.startswith('//') or line.startswith('/*') or not line.strip()):
                     continue
                 if ':' in line:
@@ -50,13 +53,22 @@ class YaparParser:
                         found_first_production = True
                     body = parts[1].strip()
                     if body:
-                        self.productions[current_head].append(self._split_words(body))
+                        # Puede haber varias alternativas en la misma línea
+                        alternatives = [alt.strip() for alt in body.split('|')]
+                        for alt in alternatives:
+                            if alt:
+                                self.productions[current_head].append(self._split_words(alt))
                 elif self._starts_with(line, '|') and current_head:
                     alt = line[1:].strip()
                     if alt:
                         self.productions[current_head].append(self._split_words(alt))
                 elif line == ';':
                     current_head = None
+                elif current_head:
+                    # Si estamos dentro de una producción y la línea no empieza con '|' ni es ';', es una alternativa (como '    termino')
+                    alt = line.strip()
+                    if alt:
+                        self.productions[current_head].append(self._split_words(alt))
 
     def _strip_comments_and_whitespace(self, line):
         line = line.strip()
@@ -97,3 +109,7 @@ class YaparParser:
         for head, rules in self.productions.items():
             for alt in rules:
                 print(f"  {head} -> {' '.join(alt)}")
+        print("[YaparParser] Producciones cargadas:")
+        for head, prods in self.productions.items():
+            for prod in prods:
+                print(f"  {head} -> {' '.join(prod)}")

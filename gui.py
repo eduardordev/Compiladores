@@ -109,8 +109,14 @@ class SimuladorApp:
             from parser_integration import parse_from_tokens
 
             sim = SimuladorTxT(diccionarios, iniciales, finales, archivo, reservadas, operadores_reservados, tokens, tabla)
-            tokens_parser = sim.get_tokens_for_parser()
-            parse_from_tokens(tokens_parser, self.yapar_path)
+            tokens_parser = sim.get_tokens_for_parser()  # Debe ser lista de listas
+
+            for i, tokens_line in enumerate(tokens_parser, 1):
+                try:
+                    parse_from_tokens(tokens_line, yapar_path)
+                    print(f"✔ Línea {i} válida")
+                except Exception as e:
+                    print(f"❌ Línea {i} inválida: {e}")
 
             self.console.configure(state='normal')
             self.console.insert(tk.END, "\n--- Análisis completo ---\n")

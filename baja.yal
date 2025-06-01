@@ -19,4 +19,4 @@ rule gettoken =
   | ")" { return "PARENTESIS_DERECHO" }
   | digits { return "NUMERO" }
   | id { return "IDENTIFICADOR" }
-  | ws { return "WS" }
+  | ws { }

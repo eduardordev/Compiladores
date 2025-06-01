@@ -22,6 +22,7 @@ def parse_from_tokens(tokens, yapar_path, finales=None, archivo=None, reservadas
             print(token)
 
         # Ejecutar análisis sintáctico
+        print("Tokens enviados al parser:", tokens)
         result = syntactic_parser.parse(tokens)
 
         print("\n✅ Análisis sintáctico finalizado correctamente.")
