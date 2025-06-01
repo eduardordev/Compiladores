@@ -1,28 +1,25 @@
 /* INICIA Sección de TOKENS */
 %token IF FOR WHILE SUMA RESTA MULTIPLICACION DIVISION
-%token PARENTESIS_IZQUIERDO PARENTESIS_DERECHO DÍGITO IDENTIFICADOR
-%token WS
-IGNORE WS
+%token PARENTESIS_IZQUIERDO PARENTESIS_DERECHO
+%token NUMERO IDENTIFICADOR
 /* FINALIZA Sección de TOKENS */
 
 %%
 
-instruccion:
-    control
-  | asignacion
+expresion:
+    termino
+  | expresion SUMA termino
+  | expresion RESTA termino
 ;
 
-control:
-    IF PARENTESIS_IZQUIERDO condicion PARENTESIS_DERECHO
-  | WHILE PARENTESIS_IZQUIERDO condicion PARENTESIS_DERECHO
+termino:
+    factor
+  | termino MULTIPLICACION factor
+  | termino DIVISION factor
 ;
 
-condicion:
-    IDENTIFICADOR
-  | DÍGITO
-;
-
-asignacion:
-    IDENTIFICADOR SUMA DÍGITO
-  | IDENTIFICADOR RESTA DÍGITO
+factor:
+    NUMERO
+  | IDENTIFICADOR
+  | PARENTESIS_IZQUIERDO expresion PARENTESIS_DERECHO
 ;

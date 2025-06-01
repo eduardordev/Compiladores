@@ -1,67 +1,22 @@
-(* La sección {header} es opcional *)
-
-(* Definiendo los tokens a usar en este archivo *)
-
-(* Definiendo el break de línea *)
+(* Definiciones de tokens *)
 let delim = [' ''\t''\n']
 let ws = delim+
-
-(* Segundo token: expresión regular que acepte números *)
 let digit = ['0'-'9']
-
-(* Tercer token: hacer un digito *)
 let digits = digit+
-
-(* Séptimo token: hacer los signos *)
-let sign = ['+'|'-']
-
-(* Octavo token: hacer un número *)
-let number = (sign)digits(,digits)
-
-(* token: expresión regular que solo acepte letras *)
 let letter = ['a'-'z' 'A'-'Z']
+let id = letter(letter | digits)*
 
-(* Noveno token: expresión regular que acepte identificadores *)
-let id = letter(letter|digits)*
-
-(* Definiendo las letras *)
-
-(* Definiendo las letras *)
-let letterh = ['A'-'F']
-let lettersh = letterh+
-
-(* Definiendo los números *)
-let digite = ['0'-'9']
-let digitse = digite+
-
-(* Definiendo los números *)
-let hexdigit = ((letterh)(digitse))|((digitse)(letterh))*
-
-
-(* Caracteres escapados para comillas y barra invertida *)  
-let escapado = "\\\\" | "\\\""  
-(* Caracter válido en cadenas: letra, dígito, espacio o escapado *)  
-let char     = letter  | digit  | " " | escapado  
-(* Definición de cadenas de texto *)  
-let string = "\"([^\"\\]|\\.)*\"" | "!\\$"
-
-
-rule gettoken = 
-    "IF" {return "IF"}
-    | "FOR" {return "FOR"}
-    | "+" {return "SUMA"}
-    | "-" {return "RESTA"}
-    | "*" {return "MULTIPLICACION"}
-    | "/" {return "DIVISION"}
-    | "(" {return "PARENTESIS_IZQUIERDO"}
-    | ")" {return "PARENTESIS_DERECHO"}
-    | "^" {return "POTENCIA"}
-    | digits {return "DÍGITO"}
-    | number {return "NÚMERO CON DECIMAL"}
-    | hexdigit {return "NÚMERO HEXADECIMAL"}
-    | id {return "IDENTIFICADOR"}
-    | string {return "STRING"}  
-    | "!$".* { return "COMMENT" }  
-
-
-(* La sección de {trailer} es opcional *)
+(* Análisis léxico *)
+rule gettoken =
+    "IF" { return "IF" }
+  | "FOR" { return "FOR" }
+  | "WHILE" { return "WHILE" }
+  | "+" { return "SUMA" }
+  | "-" { return "RESTA" }
+  | "*" { return "MULTIPLICACION" }
+  | "/" { return "DIVISION" }
+  | "(" { return "PARENTESIS_IZQUIERDO" }
+  | ")" { return "PARENTESIS_DERECHO" }
+  | digits { return "DÍGITO" }
+  | id { return "IDENTIFICADOR" }
+  | ws { return "WS" }

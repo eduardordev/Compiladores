@@ -1,20 +1,28 @@
+import sys
+import os
 from reg import evaluar
 from Thompson import *
 from Errores import *
 from AFD_Converter import *
 from SintaxT import *
 from ErroresArchivo import *
-from SimuladorTxT import *
+from SimuladorTxT import SimuladorTxT
+from implmentacion import diccionarios, iniciales, finales, reservadas, operadores_reservados, tokens, tabla
+from parser_integration import parse_from_tokens
+
+# Recibe las rutas desde la GUI
+txt_path = sys.argv[2] if len(sys.argv) > 2 else "alta.txt"
+base_name = os.path.splitext(os.path.basename(txt_path))[0]
+yal_path = f"{base_name}.yal"
+yapar_path = f"{base_name}.yapar"
 
 tabla = {}          # Tabla para guardar las declaraciones con let.
-archivo = "alta.txt"
 tabla_res = {}      # Tabla para guardar las palabras reservadas.
 res_list = []       # Lista para guardar las palabras reservadas.
 
-# Abriendo el archivo yal de ejemplo para leer su contenido.
-with open("alta.yal", "r", encoding='utf-8') as file:
-    data = file.read()  # Leemos todo el texto
-
+# Leer archivo .yal dinámico
+with open(yal_path, "r", encoding='utf-8') as file:
+    data = file.read()
     # ————————————————
     # Extraer las variables definidas con 'let' SIN usar re
     variables = []
@@ -427,5 +435,9 @@ with open("alta.yal", "r", encoding='utf-8') as file:
 
 
     # Llamando al simulador del txt.
+    archivo = txt_path  # Asegura que 'archivo' esté definido correctamente
     SimuladorTxT(lista_diccionarios, lista_iniciales, lista_finales, archivo, res_list, operadores_reservados, tokens, tabla)
 
+    simulador = SimuladorTxT(diccionarios, iniciales, finales, archivo, reservadas, operadores_reservados, tokens, tabla)
+    tokens_parser = simulador.get_tokens_for_parser()
+    parse_from_tokens(tokens_parser, yapar_path)

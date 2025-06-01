@@ -51,5 +51,3 @@ rule gettoken =
     | number {return "NÚMERO CON DECIMAL"}
     | hexdigit {return "NÚMERO HEXADECIMAL"}
     | id {return "IDENTIFICADOR"}
-
-(* La sección de {trailer} es opcional *)
