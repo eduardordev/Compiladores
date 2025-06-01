@@ -97,6 +97,7 @@ class SimuladorApp:
             if result.stderr:
                 self.console.insert(tk.END, "\n--- STDERR ---\n")
                 self.console.insert(tk.END, result.stderr)
+            self.console.see(tk.END)  # Desplazar consola hacia abajo
             self.console.configure(state='disabled')
         except Exception as e:
             messagebox.showerror("Error ejecución", str(e))
@@ -111,15 +112,19 @@ class SimuladorApp:
             sim = SimuladorTxT(diccionarios, iniciales, finales, archivo, reservadas, operadores_reservados, tokens, tabla)
             tokens_parser = sim.get_tokens_for_parser()  # Debe ser lista de listas
 
+            self.console.configure(state='normal')
+            self.console.insert(tk.END, "\n--- Resultados por línea ---\n")
+
             for i, tokens_line in enumerate(tokens_parser, 1):
                 try:
                     parse_from_tokens(tokens_line, yapar_path)
-                    print(f"✔ Línea {i} válida")
+                    self.console.insert(tk.END, f"✔ Línea {i} válida\nTokens aceptados: {tokens_line}\n")
                 except Exception as e:
-                    print(f"❌ Línea {i} inválida: {e}")
+                    self.console.insert(tk.END, f"❌ Línea {i} inválida: {e}\nTokens rechazados: {tokens_line}\n")
+                self.console.see(tk.END)  # Desplazar consola hacia abajo
 
-            self.console.configure(state='normal')
             self.console.insert(tk.END, "\n--- Análisis completo ---\n")
+            self.console.see(tk.END)  # Desplazar consola hacia abajo
             self.console.configure(state='disabled')
 
         except Exception as e:

@@ -492,7 +492,8 @@ class SimuladorTxT:
         Incluye todas las variables necesarias y asegura que no haya problemas de alcance o variables indefinidas.
         """
         datas = f"""
-import re
+
+# Variables necesarias para la simulación
 
 diccionarios = {diccionarios}
 iniciales = {iniciales}
@@ -506,6 +507,33 @@ diccionario_cadenas = {{}}
 cadena_strings = []
 vacio = {{}}
 vacio2 = {{}}
+
+# Función para dividir líneas
+
+def dividir_linea(linea):
+    operadores = ['(', ')', '*', '+', '-', '/']
+    partes = []
+    palabra = ''
+
+    for caracter in linea:
+        if caracter.isalnum() or caracter == '_':
+            palabra += caracter
+        elif caracter in operadores:
+            if palabra:
+                partes.append(palabra)
+                palabra = ''
+            partes.append(caracter)
+        else:
+            if palabra:
+                partes.append(palabra)
+                palabra = ''
+
+    if palabra:
+        partes.append(palabra)
+
+    return partes
+
+# Función principal
 
 def main():
     lista = []
@@ -525,7 +553,7 @@ def main():
                 cad_s.append(linea)
                 cads.append(linea)
             else:
-                partes = re.findall(r"\\d+|[a-zA-Z_]\\w*|[()+\-*/]", linea)
+                partes = dividir_linea(linea)
                 for cadena in partes:
                     cad_s.append(cadena)
                     cads.append(linea)
@@ -533,160 +561,6 @@ def main():
     simular_cadenas(diccionarios, cad_s, iniciales, finales)
     simular_res()
 
-def simular_cadenas(diccionarios, cad_s, iniciales, finales, resultado=None):
-    if resultado is None:
-        resultado = []
-    if not diccionarios or len(cad_s) == 0:
-        return resultado
-    cadena_actual = cad_s.pop(0)
-    cadena_copy = cadena_actual
-    if cadena_actual[0] == '"' and cadena_actual[-1] == '"':
-        cadena_actual = cadena_actual.replace('"', '')
-    valores_cadena = []
-    for i in range(len(diccionarios)):
-        diccionario = diccionarios[i]
-        estado_ini = iniciales[i]
-        estados_acept = finales[i]
-        estado_actual = estado_ini[0]
-        if len(cadena_actual) == 1:
-            if cadena_actual in operadores_reservados:
-                if i == len(diccionarios) - 1:
-                    valores_cadena.append(True)
-            else:
-                if i == len(diccionarios) - 1:
-                    valores_cadena.append(False)
-        for j in range(len(cadena_actual) - 1):
-            caracter_actual = cadena_actual[j]
-            caracter_siguiente = cadena_actual[j+1]
-            v, estado_actual = simular_cadena(diccionario, estado_actual, caracter_actual, caracter_siguiente, estados_acept)
-            if estado_actual == vacio:
-                estado_actual = estado_ini[0]
-            if j == len(cadena_actual) - 2:
-                valores_cadena.append(v)
-    if 'string' in tabla:
-        if cadena_copy[0] == '"' and cadena_copy[-1] == '"':
-            cadena_strings.append(cadena_copy)
-            if valores_cadena:
-                valores_cadena[-1] = True
-        else:
-            if valores_cadena:
-                valores_cadena[-1] = False
-    if 'endline' in tabla and len(valores_cadena) > 8:
-        endline = tabla['endline'].replace('(', '').replace(')', '')
-        if valores_cadena[7] and valores_cadena[8]:
-            pass
-        elif not valores_cadena[7] and not valores_cadena[8]:
-            pass
-        elif not valores_cadena[7] and valores_cadena[8]:
-            if cadena_actual in reservadas:
-                pass
-            else:
-                for k in range(len(valores_cadena)):
-                    valores_cadena[k] = False
-    diccionario_cadenas[cadena_copy] = valores_cadena
-    resultado.append(valores_cadena)
-    if True not in valores_cadena:
-        # Find the line number for error reporting
-        with open(archiv, "r", encoding="utf-8") as ar:
-            for line_num, linea in enumerate(ar, 1):
-                if cadena_copy in linea:
-                    print(f"Sintax error: {{cadena_copy}} line: {{line_num}}")
-    return simular_cadenas(diccionarios, cad_s, iniciales, finales, resultado)
-
-def simular_cadena(diccionario, estado_actual, caracter_actual, caracter_siguiente, estados_acept):
-    transiciones = diccionario[estado_actual]
-    if caracter_actual in transiciones:
-        estado_siguiente = transiciones[caracter_actual]
-        if estado_siguiente in estados_acept:
-            return True, estado_actual
-        if estado_siguiente == vacio:
-            return False, estado_actual
-        elif estado_siguiente in estados_acept:
-            return True, estado_actual
-        else:
-            return True, estado_siguiente
-    elif caracter_siguiente in transiciones:
-        estado_siguiente = transiciones[caracter_siguiente]
-        if estado_siguiente in estados_acept:
-            return True, estado_siguiente
-        if estado_siguiente == vacio:
-            return False, estado_siguiente
-        elif estado_siguiente in estados_acept:
-            return True, estado_siguiente
-        else:
-            return True, estado_siguiente
-    elif caracter_actual not in transiciones:
-        return False, estado_actual
-    else:
-        if transiciones != vacio:
-            return True, estado_actual
-        else:
-            return False, estado_actual
-
-def simular_res():
-    ultima_vez_operador = False
-    ultima_vez_reservada = False
-    ultima_vez_token = {{}}
-    diccionario = {{}}
-    for clave in tokens:
-        ultima_vez_token[clave] = False
-    for clave, lista in diccionario_cadenas.items():
-        if len(lista) == 1:
-            if lista[0] is True:
-                print(f"Operador detectado: {{clave}}")
-            elif lista[0] is False:
-                # Find the line number for error reporting
-                with open(archiv, "r", encoding="utf-8") as ar:
-                    for line_num, linea in enumerate(ar, 1):
-                        if clave in linea:
-                            print(f"Sintax error: {{clave}} line: {{line_num}}")
-        for i, valor in enumerate(lista):
-            for s, (key, value) in enumerate(tabla.items()):
-                if valor is True:
-                    if i == s:
-                        if key in tokens:
-                            if clave in reservadas:
-                                print(f"Palabra reservada: {{clave}}")
-                                ultima_vez_reservada = True
-                                ultima_vez_token[key] = False
-                                ultima_vez_operador = False
-                            elif key in operadores_reservados:
-                                if not ultima_vez_operador:
-                                    print(f"Operador reservado: {{clave}}")
-                                    ultima_vez_operador = True
-                                    ultima_vez_reservada = False
-                                    ultima_vez_token[key] = False
-                            else:
-                                ultima_vez_operador = False
-                                ultima_vez_reservada = False
-                                ultima_vez_token[key] = True
-                                diccionario[clave] = key
-    new_dict = {{}}
-    for k, v in diccionario.items():
-        if not isinstance(v, bool):
-            new_dict[k] = v
-    for keys, value in new_dict.items():
-        if value == "string":
-            if cadena_strings:
-                string2 = cadena_strings.pop()
-                comillas = 0
-                palabra = ''
-                for c in string2:
-                    if c == '"':
-                        comillas += 1
-                        if comillas == 2:
-                            print('"' + palabra.strip() + '" type: ' + value)
-                            palabra = ''
-                            comillas = 0
-                    else:
-                        palabra += c
-                if palabra:
-                    print('"' + palabra.strip() + '"')
-        else:
-            print("Token: " + str(keys) + " type: " + str(value))
-
-if __name__ == "__main__":
-    main()
 """
         with open(nombre, 'w', encoding='utf-8') as f:
             f.write(datas)
