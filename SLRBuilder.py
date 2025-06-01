@@ -1,6 +1,8 @@
 from collections import defaultdict
 from YaparParser import YaparParser
 
+print("[SLRBuilder] Archivo SLRBuilder.py cargado")
+
 class LR0Item:
     def __init__(self, head, body, dot_pos=0):
         self.head = head
@@ -22,8 +24,10 @@ class LR0Item:
 
 class SLRBuilder:
     def __init__(self, yapar_parser):
+        print("[SLRBuilder] __init__ ejecutado")
         self.grammar = yapar_parser.productions
         self.start_symbol = yapar_parser.start_symbol
+        print("[SLRBuilder] start_symbol:", self.start_symbol)  # DEPURACIÓN
         self.terminals = yapar_parser.tokens
         self.non_terminals = set(self.grammar.keys())
         self.augmented_start = self.start_symbol + "'"
@@ -101,18 +105,22 @@ class SLRBuilder:
         return symbols
 
     def _compute_first_sets(self):
+        
         for terminal in self.terminals:
             self.first_sets[terminal] = {terminal}
+        
         for nt in self.non_terminals:
             self.first_sets[nt] = set()
 
-        changed = True
-        while changed:
-            changed = False
+        max_iterations = len(self.non_terminals) ** 2
+
+        for _ in range(max_iterations):
+            updated = False
             for head, prods in self.grammar.items():
                 for prod in prods:
                     prev_size = len(self.first_sets[head])
                     if not prod:
+                        
                         self.first_sets[head].add('')
                     else:
                         for symbol in prod:
@@ -120,18 +128,23 @@ class SLRBuilder:
                             if '' not in self.first_sets[symbol]:
                                 break
                         else:
+                            
                             self.first_sets[head].add('')
                     if len(self.first_sets[head]) > prev_size:
-                        changed = True
+                        updated = True
+            if not updated:
+                break
 
     def _compute_follow_sets(self):
+  
         for nt in self.non_terminals:
             self.follow_sets[nt] = set()
         self.follow_sets[self.start_symbol] = {'$'}
 
-        changed = True
-        while changed:
-            changed = False
+        max_iterations = len(self.non_terminals) ** 2
+
+        for _ in range(max_iterations):
+            updated = False
             for head, prods in self.grammar.items():
                 for prod in prods:
                     follow_temp = self.follow_sets[head].copy()
@@ -139,23 +152,31 @@ class SLRBuilder:
                         if symbol in self.non_terminals:
                             prev_size = len(self.follow_sets[symbol])
                             self.follow_sets[symbol].update(follow_temp)
+
                             if '' in self.first_sets[symbol]:
                                 follow_temp.update(self.first_sets[symbol] - {''})
                             else:
                                 follow_temp = self.first_sets[symbol]
+
                             if len(self.follow_sets[symbol]) > prev_size:
-                                changed = True
+                                updated = True
                         else:
-                            follow_temp = self.first_sets[symbol]
+                            follow_temp = self.first_sets.get(symbol, {symbol})
+            if not updated:
+                break
 
     def _build_parsing_table(self):
+        print("[SLRBuilder] Ejecutando _build_parsing_table")
         for idx, state in enumerate(self.states):
             for item in state:
                 if item.dot_pos < len(item.body):
                     symbol = item.body[item.dot_pos]
+                    # DEPURACIÓN: Mostrar símbolo y terminales
+                    print(f"[SLRBuilder] Estado {idx}, item: {item}, símbolo en el punto: '{symbol}', terminales: {self.terminals}")
                     if symbol in self.terminals:
                         target = self.transitions.get((idx, symbol))
                         if target is not None:
+                            print(f"[SLRBuilder]  -> shift agregado: ACTION[{idx}][{symbol}] = ('s', {target})")
                             self.action_table[idx][symbol] = ('s', target)
                 else:
                     if item.head == self.start_symbol:

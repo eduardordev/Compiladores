@@ -7,6 +7,9 @@ class YaparParser:
         self.productions = defaultdict(list)
         self.start_symbol = None
         self._parse_file(filepath)
+        print("[YaparParser] start_symbol:", self.start_symbol)
+        if self.start_symbol is None:
+            raise ValueError("No se detectó símbolo inicial en el archivo .yapar")
 
     def _parse_file(self, filepath):
         with open(filepath, encoding='utf-8') as f:
@@ -15,6 +18,7 @@ class YaparParser:
         token_section = True
         in_productions = False
         current_head = None
+        found_first_production = False
 
         for line in lines:
             line = self._strip_comments_and_whitespace(line)
@@ -35,11 +39,15 @@ class YaparParser:
                     self.ignore_tokens.update(ignored)
 
             elif in_productions:
+                # Ignora líneas vacías o comentarios antes de la primera producción
+                if not found_first_production and (line.startswith('//') or line.startswith('/*') or not line.strip()):
+                    continue
                 if ':' in line:
                     parts = self._split_once(line, ':')
                     current_head = parts[0].strip()
                     if self.start_symbol is None:
                         self.start_symbol = current_head
+                        found_first_production = True
                     body = parts[1].strip()
                     if body:
                         self.productions[current_head].append(self._split_words(body))

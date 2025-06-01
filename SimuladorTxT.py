@@ -385,7 +385,7 @@ class SimuladorTxT:
             
         # print(new_dict)
 
-            # Imprime los tokens encontrados.
+            # Imprimiendo los tokens encontrados.
             #print("Tokens encontrados: ", diccionario)
 
             #print(diccionario)
@@ -696,7 +696,9 @@ if __name__ == "__main__":
         resultado = []
         # Mapear el nombre del token al índice del AFD (por el orden en baja.yal)
         token_map = list(self.tabla.keys())
+        print("token_map:", token_map)  # DEPURACIÓN
         for cadena, valores in self.diccionario_cadenas.items():
+            print("cadena:", cadena, "valores:", valores)  # DEPURACIÓN
             try:
                 idx = valores.index(True)
             except ValueError:
@@ -729,11 +731,11 @@ if __name__ == "__main__":
                 resultado.append(("PARENTESIS_IZQUIERDO", cadena))
             elif cadena == ")":
                 resultado.append(("PARENTESIS_DERECHO", cadena))
-            elif cadena.lower() == "if":
+            elif cadena.upper() == "IF":
                 resultado.append(("IF", cadena))
-            elif cadena.lower() == "for":
+            elif cadena.upper() == "FOR":
                 resultado.append(("FOR", cadena))
-            elif cadena.lower() == "while":
+            elif cadena.upper() == "WHILE":
                 resultado.append(("WHILE", cadena))
             elif token_name == "string":
                 resultado.append(("STRING", cadena))

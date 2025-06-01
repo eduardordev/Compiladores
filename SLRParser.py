@@ -13,6 +13,11 @@ class SLRParser:
             state = stack[-1]
             current_token, token_value = input_tokens[cursor]
 
+            # DEPURACIÓN: imprime los tokens válidos en el estado actual y el token recibido
+            if cursor == 0:
+                print("Tokens válidos en estado", state, ":", list(self.action_table[state].keys()))
+                print("Token recibido:", current_token)
+
             action = self.action_table[state].get(current_token)
             if not action:
                 raise SyntaxError(f"Error de sintaxis en token {current_token} ({token_value}) en estado {state}")

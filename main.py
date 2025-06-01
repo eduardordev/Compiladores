@@ -9,7 +9,10 @@ from ErroresArchivo import *
 from SimuladorTxT import SimuladorTxT
 from implmentacion import diccionarios, iniciales, finales, reservadas, operadores_reservados, tokens, tabla
 from parser_integration import parse_from_tokens
+from YaparParser import YaparParser
+from SLRBuilder import SLRBuilder
 
+print("[main.py] Iniciando main.py")
 # Recibe las rutas desde la GUI
 txt_path = sys.argv[2] if len(sys.argv) > 2 else "alta.txt"
 base_name = os.path.splitext(os.path.basename(txt_path))[0]
@@ -441,3 +444,12 @@ with open(yal_path, "r", encoding='utf-8') as file:
     simulador = SimuladorTxT(diccionarios, iniciales, finales, archivo, reservadas, operadores_reservados, tokens, tabla)
     tokens_parser = simulador.get_tokens_for_parser()
     parse_from_tokens(tokens_parser, yapar_path)
+
+    print("[main.py] Creando YaparParser...")
+    # Después de crear el parser, imprime el resumen de la gramática
+    yapar_parser = YaparParser(yapar_path)
+    yapar_parser.print_summary()
+    print("[main.py] YaparParser creado. Creando SLRBuilder...")
+    slr = SLRBuilder(yapar_parser)
+    print("[main.py] SLRBuilder creado. Imprimiendo tablas...")
+    slr.print_tables()

@@ -5,7 +5,6 @@
 /* FINALIZA Sección de TOKENS */
 
 %%
-
 expresion:
     termino
   | expresion SUMA termino
