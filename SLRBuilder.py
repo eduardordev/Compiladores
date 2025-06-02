@@ -196,6 +196,31 @@ class SLRBuilder:
                 if target is not None:
                     self.goto_table[idx][nt] = target
 
+    def draw_lr0_automaton(self, filename='lr0.png'):
+        """
+        Dibuja el autómata LR(0) usando graphviz y lo guarda como imagen PNG.
+        """
+        try:
+            from graphviz import Digraph
+        except ImportError:
+            print("[SLRBuilder] Error: Debes instalar graphviz (pip install graphviz)")
+            return
+        dot = Digraph(format='png')
+        # Nodos: cada estado con su número y los items LR(0)
+        for idx, state in enumerate(self.states):
+            label = f"I{idx}:\n" + '\n'.join(str(item) for item in sorted(state, key=lambda x: (x.head, x.dot_pos, tuple(x.body))))
+            dot.node(str(idx), label, shape='ellipse', fontsize='10')
+        # Aristas: transiciones
+        for (from_idx, symbol), to_idx in self.transitions.items():
+            dot.edge(str(from_idx), str(to_idx), label=symbol)
+        # Estado inicial destacado
+        dot.node('start', '', shape='point')
+        dot.edge('start', '0', style='dashed')
+        # Guardar imagen
+        output_path = filename
+        dot.render(filename=output_path, cleanup=True)
+        print(f"[SLRBuilder] Autómata LR(0) guardado en {output_path}.png")
+
     def print_states(self):
         for i, state in enumerate(self.states):
             print(f"Estado {i}:")
