@@ -578,7 +578,7 @@ def main():
                         token_name = token_map[idx]
                         break
                 # --- Ajuste robusto para identificadores y números ---
-                if (token_name is None or token_name.lower() in ("digits", "digit", "number")) and cadena.isdigit():
+                if cadena.isdigit():
                     tokens_linea.append(("NUMERO", cadena))
                 elif (token_name is not None and token_name.lower() in ("id", "identificador")) or (token_name is None and (cadena.isalpha() or (cadena and cadena[0].isalpha() and all(c.isalnum() or c == '_' for c in cadena)))):
                     tokens_linea.append(("IDENTIFICADOR", cadena))
