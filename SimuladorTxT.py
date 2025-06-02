@@ -554,53 +554,50 @@ def main():
             f.write(datas)
             
     def get_tokens_for_parser(self):
-        """
-        Devuelve los tokens válidos como tuplas (TOKEN_NAME, valor), agrupados por línea.
-        Reconoce decimales, negativos, strings e identificadores aunque el autómata no los marque explícitamente.
-        Compatible con configuraciones baja, media y alta.
-        """
         resultado = []
         token_map = list(self.tabla.keys())
         identificador_keys = {k for k in token_map if k.lower() in ("id", "identificador", "letter")}
         decimal_keys = {k for k in token_map if k.lower() in ("decimal", "decimales", "float", "real")}
         negativo_keys = {k for k in token_map if k.lower() in ("negativo", "negativos")}
         string_keys = {k for k in token_map if k.lower() == "string"}
-        # Leer el archivo de entrada para obtener las líneas originales
+
         with open(self.archivo, "r", encoding="utf-8") as f:
             lineas = [line.rstrip('\n') for line in f]
+
         for linea in lineas:
-            if not linea.strip() or linea.strip().startswith("//"):
+            if not linea.strip():
                 resultado.append([])
                 continue
+
             tokens_linea = []
             partes = separar_tokens(linea.strip())
+
             for cadena in partes:
+                if not cadena or all(not c.isprintable() for c in cadena):
+                    continue  # Ignorar cadenas vacías o invisibles
+
                 valores = self.diccionario_cadenas.get(cadena, [])
                 token_name = None
                 for idx, v in enumerate(valores):
                     if v is True and idx < len(token_map):
                         token_name = token_map[idx]
                         break
-                # --- Mapeo robusto ---
-                # CORRECCIÓN FINAL: Si la cadena es un identificador (letra/_ seguido de alfanumérico/_), SIEMPRE márcala como IDENTIFICADOR, NUNCA como DIGIT, sin importar el autómata
+
                 if cadena and (cadena[0].isalpha() or cadena[0] == '_') and all(c.isalnum() or c == '_' for c in cadena):
-                    # Palabras reservadas (IF, FOR, WHILE) se reconocen aparte
                     if cadena.upper() in ("IF", "FOR", "WHILE"):
                         tokens_linea.append((cadena.upper(), cadena))
                     else:
                         tokens_linea.append(("IDENTIFICADOR", cadena))
                 elif (token_name in string_keys) or (cadena.startswith('"') and cadena.endswith('"')):
-                    # Si empieza y termina con comillas, es STRING
                     tokens_linea.append(("STRING", cadena.strip('"')))
                 elif (token_name in decimal_keys) or ('.' in cadena or ',' in cadena) and any(c.isdigit() for c in cadena):
-                    # Si tiene punto o coma y dígitos, es DECIMAL
                     tokens_linea.append(("DECIMAL", cadena))
                 elif (token_name in negativo_keys) or (cadena.startswith('-') and (('.' in cadena or ',' in cadena) and cadena[1:].replace('.', '', 1).replace(',', '', 1).isdigit())):
-                    # Negativo decimal
                     tokens_linea.append(("NEGATIVO", cadena))
                 elif (token_name in negativo_keys) or (cadena.startswith('-') and cadena[1:].isdigit()):
-                    # Negativo entero
                     tokens_linea.append(("NEGATIVO", cadena))
+                elif cadena.startswith("0x") and all(c in "0123456789abcdefABCDEF" for c in cadena[2:]):
+                    tokens_linea.append(("HEXADECIMAL", cadena))
                 elif (token_name is None or (hasattr(token_name, 'lower') and token_name.lower() in ("digits", "digit", "number"))) and cadena.isdigit():
                     tokens_linea.append(("NUMERO", cadena))
                 elif cadena == "+":
@@ -627,15 +624,13 @@ def main():
                     tokens_linea.append((token_name.upper(), cadena))
                 else:
                     tokens_linea.append(("ERROR", cadena))
+
             resultado.append(tokens_linea)
+
         print("Tokens enviados al parser:", resultado)
         return resultado
 
 def separar_tokens(linea):
-    """
-    Separa una línea en tokens: números, identificadores, operadores y paréntesis.
-    No usa la librería re.
-    """
     tokens = []
     i = 0
     while i < len(linea):
@@ -644,6 +639,10 @@ def separar_tokens(linea):
         if c.isspace():
             i += 1
             continue
+        # COMENTARIOS: si comienza con //
+        if linea[i:i+2] == "//":
+            tokens.append(linea[i:])
+            break
         # STRINGS entre comillas dobles
         if c == '"':
             j = i + 1
@@ -656,7 +655,28 @@ def separar_tokens(linea):
             else:
                 tokens.append(linea[i:])
                 break
-        # Números decimales (con punto o coma)
+        # HEXADECIMAL: 0x seguido de dígitos hexadecimales
+        if c == '0' and i + 1 < len(linea) and linea[i+1] in "xX":
+            j = i + 2
+            while j < len(linea) and linea[j] in "0123456789abcdefABCDEF":
+                j += 1
+            tokens.append(linea[i:j])
+            i = j
+            continue
+        # NÚMEROS NEGATIVOS: enteros o decimales con - delante
+        if c == '-' and i + 1 < len(linea) and linea[i+1].isdigit():
+            j = i + 1
+            num = '-'
+            decimal = False
+            while j < len(linea) and (linea[j].isdigit() or (linea[j] in '.,' and not decimal)):
+                if linea[j] in '.,':
+                    decimal = True
+                num += linea[j]
+                j += 1
+            tokens.append(num)
+            i = j
+            continue
+        # NÚMEROS POSITIVOS: enteros o decimales
         if c.isdigit():
             num = c
             j = i + 1
@@ -669,7 +689,7 @@ def separar_tokens(linea):
             tokens.append(num)
             i = j
             continue
-        # Identificadores (letra o _ seguido de letras, dígitos o _)
+        # IDENTIFICADORES
         if c.isalpha() or c == "_":
             ident = c
             j = i + 1
@@ -679,11 +699,11 @@ def separar_tokens(linea):
             tokens.append(ident)
             i = j
             continue
-        # Operadores y paréntesis (uno por uno)
+        # OPERADORES y PARÉNTESIS
         if c in "+-*/()":
             tokens.append(c)
             i += 1
             continue
-        # Si no es nada de lo anterior, solo avanza
+        # Otro carácter (se ignora o se puede marcar como error)
         i += 1
     return tokens

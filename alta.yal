@@ -1,23 +1,28 @@
 (* Definiciones de tokens *)
-let delim = [' ''\t''\n']
+let delim = [' ' '\t' '\n']
 let ws = delim+
 let digit = ['0'-'9']
 let digits = digit+
 let letter = ['a'-'z' 'A'-'Z']
-let id = letter(letter | digits)*
+let id = letter (letter | digits)*
 let sign = ['+' '-']
-let negativo_decimal = '-' digit+ ('.' digit+ | ',' digit+)
-let negativo = '-' digit+
+let negativo = '~' digit+
+let negativo_decimal = '~' digit+ ('.' digit+ | ',' digit+)
 let decimal = digit+ ('.' digit+ | ',' digit+)
 let number = digit+
 let string = '"' ([^"\n])* '"'
 let hexdigit = ['0'-'9' 'A'-'F' 'a'-'f']
 let hex = '0x' hexdigit+
-let comentario = '//' ([^\n])* 
+let comentario = '/' '/' ([^\n])* 
 
 (* Análisis léxico *)
 rule gettoken =
-    "IF" { return "IF" }
+    hex { return "HEXADECIMAL" }
+  | negativo_decimal { return "NEGATIVO" }
+  | negativo { return "NEGATIVO" }
+  | decimal { return "DECIMAL" }
+  | number { return "NUMERO" }
+  | "IF" { return "IF" }
   | "FOR" { return "FOR" }
   | "WHILE" { return "WHILE" }
   | "+" { return "SUMA" }
@@ -26,12 +31,8 @@ rule gettoken =
   | "/" { return "DIVISION" }
   | "(" { return "PARENTESIS_IZQUIERDO" }
   | ")" { return "PARENTESIS_DERECHO" }
-  | negativo_decimal { return "NEGATIVO" }
-  | negativo { return "NEGATIVO" }
-  | decimal { return "DECIMAL" }
-  | number { return "NUMERO" }
   | id { return "IDENTIFICADOR" }
   | string { return "STRING" }
-  | ws { return "WS" }
-  | hex { return "HEXADECIMAL" }
   | comentario { return "COMENTARIO" }
+  | ws { return "WS" }
+ 
