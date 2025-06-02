@@ -82,41 +82,29 @@ class SimuladorTxT:
         self.t = []
         self.cads = []
 
-
         with open(self.archivo, "r") as archivo:
             for linea in archivo:
+                linea = linea.strip()
+                if not linea:
+                    continue
                 # Si la cadena empieza y termina con "", no se separa.
                 if linea[0] == '"' and linea[-1] == '"':
-                    self.cad_s.append(linea.strip())
-                    self.cads.append(linea.strip())
+                    self.cad_s.append(linea)
+                    self.cads.append(linea)
                 else:
-                    # Separar usando expresiones regulares para separar operadores y paréntesis
-                    import re
-                    # Expresión: separa números, identificadores y operadores/paréntesis
-                    partes = separar_tokens(linea.strip())
+                    partes = separar_tokens(linea)
                     for cadena in partes:
                         self.cad_s.append(cadena)
-                        self.cads.append(linea.strip())
+                        self.cads.append(linea)
                     self.t.extend(partes)
-                    self.cads.extend(linea.strip())
-                    self.cad_s.extend(partes)
-        
         # print("self.t: ", self.t)
         # print("self.cad_s: ", self.cad_s)
 
         resultados_txt = self.simular_cadenas(diccionarios, iniciales, finales, resultado=[])
-
-        #self.impresion_txt(resultados_txt) # Imprimiendo los resultados de la simulación de los archivos txt.
-
         resultados_res = self.simular_res()
-
-        #self.impresion_res(resultados_res)
-        
         # Generando el archivo py. 
         self.archivopy = "implmentacion.py"
-
         print("Tokens: ", self.tokens)
-        
         self.generar_py(self.archivopy, self.diccionarios, self.iniciales, self.finales, self.archivo, res_copy, self.operadores_reservados, self.tokens, self.tabla)
 
     def simular_cadenas(self, diccionarios, iniciales, finales, resultado=[]): # Simulando las cadenas que vienen en el archivo txt.
@@ -578,29 +566,26 @@ def main():
         # Para cada línea, genera su lista de tokens
         for linea in lineas:
             if not linea.strip() or linea.strip().startswith("//"):
+                resultado.append([])
                 continue  # Ignora líneas vacías o comentarios
             tokens_linea = []
-            # Extrae las partes (igual que en el constructor)
             partes = separar_tokens(linea.strip())
             for cadena in partes:
                 valores = self.diccionario_cadenas.get(cadena, [])
-                try:
-                    idx = valores.index(True)
-                except ValueError:
-                    continue
-                if idx < len(token_map):
-                    token_name = token_map[idx]
-                else:
-                    continue
-                # Clasificación explícita
-                if token_name in ("digits", "digit", "NUMERO"):
+                token_name = None
+                for idx, v in enumerate(valores):
+                    if v is True and idx < len(token_map):
+                        token_name = token_map[idx]
+                        break
+                # --- Ajuste robusto para identificadores y números ---
+                if (token_name is None or token_name.lower() in ("digits", "digit", "number")) and cadena.isdigit():
                     tokens_linea.append(("NUMERO", cadena))
+                elif (token_name is not None and token_name.lower() in ("id", "identificador")) or (token_name is None and (cadena.isalpha() or (cadena and cadena[0].isalpha() and all(c.isalnum() or c == '_' for c in cadena)))):
+                    tokens_linea.append(("IDENTIFICADOR", cadena))
                 elif token_name == "number":
                     tokens_linea.append(("NÚMERO CON DECIMAL", cadena))
                 elif token_name == "hexdigit":
                     tokens_linea.append(("NÚMERO HEXADECIMAL", cadena))
-                elif token_name in ("id", "IDENTIFICADOR"):
-                    tokens_linea.append(("IDENTIFICADOR", cadena))
                 elif token_name == "WS":
                     continue
                 elif cadena == "+":
@@ -623,14 +608,17 @@ def main():
                     tokens_linea.append(("WHILE", cadena))
                 elif token_name == "string":
                     tokens_linea.append(("STRING", cadena))
+                elif token_name is not None and token_name.lower() == "digit":
+                    # Si el token_name es 'digit' pero la cadena no es numérica, tratar de identificar si es identificador
+                    if cadena and cadena[0].isalpha() and all(c.isalnum() or c == '_' for c in cadena):
+                        tokens_linea.append(("IDENTIFICADOR", cadena))
+                    else:
+                        tokens_linea.append(("ERROR", cadena))
+                elif token_name is None:
+                    tokens_linea.append(("ERROR", cadena))
                 else:
                     tokens_linea.append((token_name.upper(), cadena))
-            if tokens_linea:
-                # Solo agrega si hay al menos un token válido
-                resultado.append(tokens_linea)
-            else:
-                # Si no hay tokens válidos, agrega un marcador de error para esa línea
-                resultado.append([("ERROR", linea)])
+            resultado.append(tokens_linea)
         print("Tokens enviados al parser:", resultado)
         return resultado
 
@@ -647,7 +635,7 @@ def separar_tokens(linea):
         if c.isspace():
             i += 1
             continue
-        # Números
+        # Números (soporta secuencias como 123, pero también separa bien en 1-2, 6/9, (5+2))
         if c.isdigit():
             num = c
             i += 1
@@ -665,7 +653,7 @@ def separar_tokens(linea):
                 i += 1
             tokens.append(ident)
             continue
-        # Operadores y paréntesis
+        # Operadores y paréntesis (uno por uno)
         if c in "+-*/()":
             tokens.append(c)
             i += 1

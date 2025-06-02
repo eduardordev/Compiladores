@@ -123,7 +123,7 @@ class SimuladorApp:
                     self.console.insert(tk.END, f"❌ Línea {i} inválida: {e}\nTokens rechazados: {tokens_line}\n")
                 self.console.see(tk.END)  # Desplazar consola hacia abajo
 
-            self.console.insert(tk.END, "\n--- Análisis completo ---\n")
+            self.console.insert(tk.END, "✅ Análisis sintáctico finalizado correctamente.\n")
             self.console.see(tk.END)  # Desplazar consola hacia abajo
             self.console.configure(state='disabled')
 

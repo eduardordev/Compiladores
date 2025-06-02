@@ -2,24 +2,39 @@
 %token IF FOR WHILE SUMA RESTA MULTIPLICACION DIVISION
 %token PARENTESIS_IZQUIERDO PARENTESIS_DERECHO
 %token NUMERO IDENTIFICADOR
-%start expresion
+%start linea
 /* FINALIZA Sección de TOKENS */
 
 %%
+linea:
+      expresion
+    | IF
+    | FOR
+    | WHILE
+    | SUMA
+    | RESTA
+    | MULTIPLICACION
+    | DIVISION
+    | PARENTESIS_IZQUIERDO
+    | PARENTESIS_DERECHO
+    | NUMERO
+    | IDENTIFICADOR
+;
+
 expresion:
-    termino
-  | expresion SUMA termino
-  | expresion RESTA termino
+      termino
+    | expresion SUMA termino
+    | expresion RESTA termino
 ;
 
 termino:
-    factor
-  | termino MULTIPLICACION factor
-  | termino DIVISION factor
+      factor
+    | termino MULTIPLICACION factor
+    | termino DIVISION factor
 ;
 
 factor:
-    NUMERO
-  | IDENTIFICADOR
-  | PARENTESIS_IZQUIERDO expresion PARENTESIS_DERECHO
+      NUMERO
+    | IDENTIFICADOR
+    | PARENTESIS_IZQUIERDO expresion PARENTESIS_DERECHO
 ;
