@@ -1,6 +1,10 @@
-(7 + 9) - A
-5 * (3 + 2)
-X / 4
-"hola"
-12.5 + 3
-0x1A + 2
+aaxyz
+aa13xyz
+variable1 variable2
+1.5
+IF FOR
+1,6
+-12
+"hola 3" "goooooooooooa 2222222222" "hhhhh asadfsd fsssdf as"
+//queremos100
+0x1A2F

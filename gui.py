@@ -83,7 +83,7 @@ class SimuladorApp:
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'
             result = subprocess.run(
-                [sys.executable, os.path.join(root_dir, 'main.py'),  yal_path, txt_path],
+                [sys.executable, os.path.join(root_dir, 'main.py'), yal_path, txt_path, yapar_path],
                 capture_output=True,
                 text=True,
                 cwd=root_dir,
@@ -99,6 +99,26 @@ class SimuladorApp:
                 self.console.insert(tk.END, result.stderr)
             self.console.see(tk.END)  # Desplazar consola hacia abajo
             self.console.configure(state='disabled')
+
+            # Validación de error de tokens faltantes (del main.py)
+            # if "[ERROR] Los siguientes tokens están en el archivo .yapar pero NO están definidos en el archivo .yal:" in result.stdout:
+            #     # Extraer los tokens faltantes y mostrar en ventana
+            #     missing_lines = []
+            #     lines = result.stdout.splitlines()
+            #     error_idx = None
+            #     for idx, line in enumerate(lines):
+            #         if "[ERROR] Los siguientes tokens están en el archivo .yapar pero NO están definidos en el archivo .yal:" in line:
+            #             error_idx = idx
+            #             break
+            #     if error_idx is not None:
+            #         for l in lines[error_idx+1:]:
+            #             if l.strip().startswith("-"):
+            #                 missing_lines.append(l.strip())
+            #             else:
+            #                 break
+            #     messagebox.showerror("Tokens faltantes en YALex", "Hay tokens en el archivo .yapar que no están definidos en el archivo .yal:\n" + "\n".join(missing_lines))
+            #     return
+
         except Exception as e:
             messagebox.showerror("Error ejecución", str(e))
             return

@@ -22,7 +22,7 @@ let number = (sign)digits(,digits)
 let letter = ['a'-'z' 'A'-'Z']
 
 (* Noveno token: expresión regular que acepte identificadores *)
-let id = letter(letter|digits)*
+let id = letter (letter|digit)*
 
 (* Definiendo las letras *)
 
@@ -47,7 +47,7 @@ rule gettoken =
     | "(" {return "PARENTESIS_IZQUIERDO"}
     | ")" {return "PARENTESIS_DERECHO"}
     | "^" {return "POTENCIA"}
-    | digits {return "DÍGITO"}
+    | id {return "IDENTIFICADOR"}
+    | digits {return "DIGIT"}
     | number {return "NÚMERO CON DECIMAL"}
     | hexdigit {return "NÚMERO HEXADECIMAL"}
-    | id {return "IDENTIFICADOR"}

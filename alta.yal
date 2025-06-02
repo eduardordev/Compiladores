@@ -5,6 +5,15 @@ let digit = ['0'-'9']
 let digits = digit+
 let letter = ['a'-'z' 'A'-'Z']
 let id = letter(letter | digits)*
+let sign = ['+' '-']
+let negativo_decimal = '-' digit+ ('.' digit+ | ',' digit+)
+let negativo = '-' digit+
+let decimal = digit+ ('.' digit+ | ',' digit+)
+let number = digit+
+let string = '"' ([^"\n])* '"'
+let hexdigit = ['0'-'9' 'A'-'F' 'a'-'f']
+let hex = '0x' hexdigit+
+let comentario = '//' ([^\n])* 
 
 (* Análisis léxico *)
 rule gettoken =
@@ -17,6 +26,12 @@ rule gettoken =
   | "/" { return "DIVISION" }
   | "(" { return "PARENTESIS_IZQUIERDO" }
   | ")" { return "PARENTESIS_DERECHO" }
-  | digits { return "DÍGITO" }
+  | negativo_decimal { return "NEGATIVO" }
+  | negativo { return "NEGATIVO" }
+  | decimal { return "DECIMAL" }
+  | number { return "NUMERO" }
   | id { return "IDENTIFICADOR" }
+  | string { return "STRING" }
   | ws { return "WS" }
+  | hex { return "HEXADECIMAL" }
+  | comentario { return "COMENTARIO" }

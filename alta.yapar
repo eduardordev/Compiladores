@@ -1,10 +1,36 @@
 /* INICIA Sección de TOKENS */
 %token IF FOR SUMA RESTA MULTIPLICACION DIVISION
 %token PARENTESIS_IZQUIERDO PARENTESIS_DERECHO POTENCIA
-%token DÍGITO NÚMERO CON DECIMAL NÚMERO HEXADECIMAL IDENTIFICADOR STRING COMMENT
+%token NUMERO DECIMAL NEGATIVO IDENTIFICADOR STRING HEXADECIMAL COMENTARIO
+%start linea
 /* FINALIZA Sección de TOKENS */
 
 %%
+
+linea:
+      lista_tokens
+;
+
+lista_tokens:
+      token
+    | lista_tokens token
+;
+
+token:
+      NUMERO
+    | DECIMAL
+    | NEGATIVO
+    | IDENTIFICADOR
+    | STRING
+    | HEXADECIMAL
+    | COMENTARIO
+    | IF
+    | FOR
+;
+
+comentario:
+    COMENTARIO
+;
 
 expresion:
     termino
@@ -19,9 +45,9 @@ termino:
 ;
 
 factor:
-    DÍGITO
-  | NÚMERO CON DECIMAL
-  | NÚMERO HEXADECIMAL
+    NUMERO
+  | DECIMAL
+  | NEGATIVO
   | IDENTIFICADOR
   | STRING
   | PARENTESIS_IZQUIERDO expresion PARENTESIS_DERECHO

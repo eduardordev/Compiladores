@@ -14,10 +14,9 @@ from SLRBuilder import SLRBuilder
 
 print("[main.py] Iniciando main.py")
 # Recibe las rutas desde la GUI
+yal_path = sys.argv[1] if len(sys.argv) > 1 else "alta.yal"
 txt_path = sys.argv[2] if len(sys.argv) > 2 else "alta.txt"
-base_name = os.path.splitext(os.path.basename(txt_path))[0]
-yal_path = f"{base_name}.yal"
-yapar_path = f"{base_name}.yapar"
+yapar_path = sys.argv[3] if len(sys.argv) > 3 else "alta.yapar"
 
 tabla = {}          # Tabla para guardar las declaraciones con let.
 tabla_res = {}      # Tabla para guardar las palabras reservadas.
@@ -87,9 +86,14 @@ with open(yal_path, "r", encoding='utf-8') as file:
         for token in lista_tokens:
             # Extrayendo el nombre del token y su valor.
             if "return" in token:
-                nombre, valor = token.split("return")
-                # Agregando el token al diccionario.
-                diccionario_tokens[nombre.strip()] = valor.strip().strip("\"")
+                partes = token.split("return", 1)  # Solo dividir en la primera ocurrencia
+                if len(partes) == 2:
+                    nombre = partes[0].replace("{", "").replace("}", "").strip()
+                    valor = partes[1].replace("{", "").replace("}", "").strip()
+                    # Agregando el token al diccionario solo si ambos existen
+                    if nombre and valor:
+                        diccionario_tokens[nombre] = valor.strip('" ')
+
         # Imprimiendo el diccionario con los tokens.
         #print(diccionario_tokens)
 
@@ -296,73 +300,31 @@ with open(yal_path, "r", encoding='utf-8') as file:
 
     #print("Tabla: ", tabla)
 
+    # --- REEMPLAZO RECURSIVO DE VARIABLES EN LAS REGEX ---
+    def expand_regex(expr, tabla, _stack=None):
+        if _stack is None:
+            _stack = set()
+        tokens = expr.split()
+        result = expr
+        for var in tabla:
+            if var in result and var not in _stack:
+                _stack.add(var)
+                result = result.replace(var, f"({expand_regex(tabla[var], tabla, _stack)})")
+                _stack.remove(var)
+        return result
+
     # Metiendo a una lista los valores del diccionario.
     listaA = []
-
     listaF = []
-
     for key in tabla:
-        listaA.append(tabla[key])
-    
-    #print("Lista: ", lista)
+        # Expande recursivamente cada regex antes de agregarla
+        listaA.append(expand_regex(tabla[key], tabla))
     regex_final = ""
     alf_final = ""
     lista_temp = []
     lista_diccionarios = [] # Este va a tener los diccionarios de cada AFD.
     lista_iniciales = [] # Este va a tener los estados iniciales de cada AFD.
     lista_finales = [] # Este va a tener los estados finales de cada AFD.
-
-
-    for i in range(len(listaA)):
-        regex = listaA[i]
-        regex = regex.replace("?", "|ε")
-
-        if "*" in regex:
-            regex = regex.replace("*****************", "*")
-            regex = regex.replace("****************", "*")
-            regex = regex.replace("***************", "*")
-            regex = regex.replace("**************", "*")
-            regex = regex.replace("************", "*")
-            regex = regex.replace("**********", "*")
-            regex = regex.replace("********", "*")
-            regex = regex.replace("******", "*")
-            regex = regex.replace("*****", "*")
-            regex = regex.replace("****", "*")
-            regex = regex.replace("***", "*")
-            regex = regex.replace("**", "*")
-
-        regex = regex.replace("'", "")
-        listaA[i] = regex
-
-        # Verificando que la expresión esté bien.
-        bien = deteccion(regex)
-
-        if bien: 
-
-            # Obteniendo individualmente cada alfabeto.
-            alfI = alfabeto(regex)
-
-            # Pasando individualmente cada expresión a postfix.
-            regexI = evaluar(regex)
-
-            #print("RegexI: ", regexI)
-
-            # Creando el AFD temporal.
-            arbol = SintaxT(regexI, alfI)
-
-            # Guardando los datos de cada AFD.
-
-            lista_diccionarios.append(arbol.dict) 
-
-            lista_iniciales.append([arbol.EstadoInicial])
-
-            lista_finales.append(arbol.EstadosAceptAFD)
-
-        else: 
-            print("Hubo un error con la regex")
-
-
-    # #print("ListaA: ", listaA)
 
     # Uniendo todas las expresiones altante un |.
     expr = "|".join(listaA)
@@ -456,6 +418,20 @@ with open(yal_path, "r", encoding='utf-8') as file:
     # Después de crear el parser, imprime el resumen de la gramática
     yapar_parser = YaparParser(yapar_path)
     yapar_parser.print_summary()
+
+    # --- VALIDACIÓN DE TOKENS ENTRE YAPAR Y YALEX ---
+    # yapar_parser.tokens: tokens definidos en %token de .yapar
+    yalex_tokens = set(tokens)  # tokens definidos en YALex (del lexer)
+    yapar_tokens = set(yapar_parser.tokens)
+    missing = yapar_tokens - yalex_tokens
+    # if missing:
+    #     print("\n[ERROR] Los siguientes tokens están en el archivo .yapar pero NO están definidos en el archivo .yal:")
+    #     for t in missing:
+    #         print(f"  - {t}")
+    #     print("Corrige el archivo .yal para definir estos tokens antes de continuar.")
+    #     sys.exit(1)
+    # --- FIN VALIDACIÓN ---
+
     print("[main.py] YaparParser creado. Creando SLRBuilder...")
     slr = SLRBuilder(yapar_parser)
     print("[main.py] SLRBuilder creado. Imprimiendo tablas...")
