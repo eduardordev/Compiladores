@@ -1,3 +1,2 @@
 #!/bin/bash
-
-java -jar /usr/local/lib/antlr-4.13.1-complete.jar "${@}"
+java -Xmx500M -cp "/usr/local/lib/antlr-4.13.1-complete.jar:$CLASSPATH" org.antlr.v4.Tool "$@"
