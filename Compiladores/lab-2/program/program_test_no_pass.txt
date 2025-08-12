@@ -1,4 +1,6 @@
-8 / "2.0"
-(3 + 2) * "7"
-9.0 - true
-"hello" + 3
+8 / "2.0"        # int / string → error
+(3 + 2) * "7"    # int * string → error
+9.0 - true       # float - bool → error
+"hello" + 3      # string + int → error
+5 % 2.0          # modulo solo int % int → error
+"hola" ^ 2 sdas      # potencia no numérica → errorasdasdas

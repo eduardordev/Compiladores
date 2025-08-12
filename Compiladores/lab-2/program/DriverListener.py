@@ -6,7 +6,8 @@ from type_check_listener import TypeCheckListener
 from antlr4.tree.Tree import ParseTreeWalker
 
 def main(argv):
-  input_stream = FileStream(argv[1])
+  # 👇 Forzar UTF-8
+  input_stream = FileStream(argv[1], encoding='utf-8')
   lexer = SimpleLangLexer(input_stream)
   stream = CommonTokenStream(lexer)
   parser = SimpleLangParser(stream)

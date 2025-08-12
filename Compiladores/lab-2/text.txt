@@ -1,0 +1,37 @@
+Introducción
+Usé ANTLR con Python para implementar un sistema de tipos básico usando Visitor y Listener. Extendí la gramática con dos nuevas operaciones (% y ^) y añadí más validaciones de tipos.
+
+Archivo “pass”
+Contiene operaciones válidas:
+
+Aritmética entre int y float (promueve a float).
+
+Concatenación string + string.
+
+% entre enteros.
+
+^ entre números.
+No hay errores → “Type checking passed”.
+
+Archivo “no pass”
+Incluye casos inválidos:
+
+Operaciones numéricas con string o bool.
+
+% con float.
+
+^ con string.
+El sistema detecta y muestra errores de tipos.
+
+Extensiones y validaciones
+
+% solo int % int.
+
+^ solo numérico.
+
+Concatenación solo string + string.
+
+Sin aritmética con bool o string (salvo concatenación válida).
+
+Conclusión
+Visitor y Listener producen resultados consistentes y muestran cómo ANTLR permite validar no solo la sintaxis sino también la semántica de un lenguaje.
