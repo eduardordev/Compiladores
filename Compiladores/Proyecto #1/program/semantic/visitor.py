@@ -20,6 +20,30 @@ class SemanticVisitor(CompiscriptVisitor):
         self.capture_stack: List[set] = []
         self.block_terminated: List[bool] = []
         self.warnings: List[str] = []
+    
+    def visit(self, tree):
+        """Override the default visit method to ensure our semantic methods are called"""
+        if tree is None:
+            return None
+        
+        # Get the method name for this node type
+        class_name = tree.__class__.__name__
+        
+        # Remove 'Context' suffix if present
+        if class_name.endswith('Context'):
+            base_name = class_name[:-7]  # Remove 'Context'
+        else:
+            base_name = class_name
+            
+        method_name = f"visit{base_name}"
+        
+        # If we have a specific method for this node type, call it
+        if hasattr(self, method_name):
+            method = getattr(self, method_name)
+            return method(tree)
+        
+        # Otherwise, use the default behavior
+        return self.visitChildren(tree)
 
     # util
     def set_type(self, ctx, t: Type):
@@ -34,9 +58,14 @@ class SemanticVisitor(CompiscriptVisitor):
     # program / block
     def visitProgram(self, ctx):
         self.block_terminated.append(False)
-        res = self.visitChildren(ctx)
+        # Visitar cada statement individualmente
+        for stmt in ctx.statement():
+            if self.block_terminated[-1]:
+                self.warnings.append(f'Código inalcanzable después de return/break/continue en línea {stmt.start.line}')
+                break
+            self.visit(stmt)
         self.block_terminated.pop()
-        return res
+        return None
 
     def visitBlock(self, ctx):
         self.symtab.push('block')
@@ -53,6 +82,47 @@ class SemanticVisitor(CompiscriptVisitor):
         self.block_terminated.pop()
         self.symtab.pop()
         return None
+
+    def visitStatement(self, ctx):
+        # Visitar el statement específico basado en cuál está presente
+        if ctx.variableDeclaration():
+            return self.visit(ctx.variableDeclaration())
+        elif ctx.constantDeclaration():
+            return self.visit(ctx.constantDeclaration())
+        elif ctx.assignment():
+            return self.visit(ctx.assignment())
+        elif ctx.functionDeclaration():
+            return self.visit(ctx.functionDeclaration())
+        elif ctx.classDeclaration():
+            return self.visit(ctx.classDeclaration())
+        elif ctx.expressionStatement():
+            return self.visit(ctx.expressionStatement())
+        elif ctx.printStatement():
+            return self.visit(ctx.printStatement())
+        elif ctx.block():
+            return self.visit(ctx.block())
+        elif ctx.ifStatement():
+            return self.visit(ctx.ifStatement())
+        elif ctx.whileStatement():
+            return self.visit(ctx.whileStatement())
+        elif ctx.doWhileStatement():
+            return self.visit(ctx.doWhileStatement())
+        elif ctx.forStatement():
+            return self.visit(ctx.forStatement())
+        elif ctx.foreachStatement():
+            return self.visit(ctx.foreachStatement())
+        elif ctx.tryCatchStatement():
+            return self.visit(ctx.tryCatchStatement())
+        elif ctx.switchStatement():
+            return self.visit(ctx.switchStatement())
+        elif ctx.breakStatement():
+            return self.visit(ctx.breakStatement())
+        elif ctx.continueStatement():
+            return self.visit(ctx.continueStatement())
+        elif ctx.returnStatement():
+            return self.visit(ctx.returnStatement())
+        else:
+            raise at(ctx, 'Statement desconocido')
 
     # declarations
     def visitVariableDeclaration(self, ctx):
