@@ -412,6 +412,11 @@ class SemanticVisitor(CompiscriptVisitor):
         return None
 
     # expressions (precedence)
+    def visitExpression(self, ctx):
+        # expression: assignmentExpr
+        # Use default behavior to delegate to children
+        return self.visitChildren(ctx)
+
     def visitLogicalOrExpr(self, ctx):
         # logicalOrExpr: logicalAndExpr ('||' logicalAndExpr)* ;
         t = self.visit(ctx.logicalAndExpr(0))
