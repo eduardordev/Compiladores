@@ -1,0 +1,5 @@
+# Requirements for Compiscript project
+# - `antlr4-python3-runtime` is required to run the ANTLR4-generated parser/lexer/visitor.
+# - `pytest` is optional (for running tests in the `tests/` folder).
+antlr4-python3-runtime>=4.9.3
+pytest>=6.0
