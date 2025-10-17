@@ -17,72 +17,6 @@ class ASTDialog(tk.Toplevel):
         text.config(state='disabled')
         text.pack(fill='both', expand=True)
 
-class TACDialog(tk.Toplevel):
-    def __init__(self, master, tac_text):
-        super().__init__(master)
-        self.title('TAC (Three Address Code)')
-        self.geometry('800x600')
-        
-        # Create notebook for tabs
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill='both', expand=True)
-        
-        # TAC Code tab
-        tac_frame = ttk.Frame(notebook)
-        notebook.add(tac_frame, text='TAC Code')
-        
-        text = tk.Text(tac_frame, wrap='none', font=('Consolas', 10))
-        text.insert('1.0', tac_text)
-        text.config(state='disabled')
-        text.pack(fill='both', expand=True)
-        
-        # Statistics tab
-        stats_frame = ttk.Frame(notebook)
-        notebook.add(stats_frame, text='Statistics')
-        
-        stats_text = tk.Text(stats_frame, wrap='none', font=('Consolas', 10))
-        stats_text.pack(fill='both', expand=True)
-        
-        # Extract statistics from TAC text
-        stats = self.extract_stats(tac_text)
-        stats_text.insert('1.0', stats)
-        stats_text.config(state='disabled')
-    
-    def extract_stats(self, tac_text):
-        """Extract statistics from TAC text"""
-        lines = tac_text.split('\n')
-        total_lines = len([l for l in lines if l.strip()])
-        
-        # Count different instruction types
-        instruction_counts = {}
-        temp_count = 0
-        label_count = 0
-        
-        for line in lines:
-            if '=' in line and 't' in line:
-                temp_count += 1
-            if ':' in line and 'L' in line:
-                label_count += 1
-            
-            # Count instruction types
-            for op in ['+', '-', '*', '/', 'goto', 'if', 'call', 'return']:
-                if op in line:
-                    instruction_counts[op] = instruction_counts.get(op, 0) + 1
-        
-        stats = f"""TAC Generation Statistics
-{'=' * 30}
-
-Total Instructions: {total_lines}
-Temporary Variables: {temp_count}
-Labels: {label_count}
-
-Instruction Breakdown:
-"""
-        for op, count in sorted(instruction_counts.items()):
-            stats += f"  {op}: {count}\n"
-        
-        return stats
-
 class CompiscriptIDE(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -114,7 +48,6 @@ class CompiscriptIDE(tk.Tk):
         toolsmenu = tk.Menu(menubar, tearoff=0)
         toolsmenu.add_command(label='Compilar', command=self.compilar, accelerator='F5')
         toolsmenu.add_command(label='Ver AST', command=self.ver_ast)
-        toolsmenu.add_command(label='Generar TAC', command=self.generar_tac, accelerator='F6')
         menubar.add_cascade(label='Herramientas', menu=toolsmenu)
 
         helpmenu = tk.Menu(menubar, tearoff=0)
@@ -154,7 +87,6 @@ class CompiscriptIDE(tk.Tk):
         self.bind('<Control-h>', lambda e: self.reemplazar())
         self.bind('<Control-f>', lambda e: self.buscar())
         self.bind('<F5>', lambda e: self.compilar())
-        self.bind('<F6>', lambda e: self.generar_tac())
 
     def update_line_numbers(self, event=None):
         self.line_numbers.config(state='normal')
@@ -230,36 +162,16 @@ class CompiscriptIDE(tk.Tk):
         finally:
             os.unlink(tmp_path)
 
-    def generar_tac(self):
+    def ver_ast(self):
         code = self.text.get('1.0', 'end-1c')
         with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
             tmp.write(code)
             tmp_path = tmp.name
         try:
-            p = subprocess.run([sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--tac'], capture_output=True, text=True)
-            if p.returncode == 0:
-                # Extract TAC from output
-                lines = p.stdout.split('\n')
-                tac_start = False
-                tac_lines = []
-                for line in lines:
-                    if 'TAC Generated Successfully!' in line:
-                        tac_start = True
-                        continue
-                    if tac_start and line.strip():
-                        if line.startswith('='):
-                            break
-                        tac_lines.append(line)
-                
-                tac_text = '\n'.join(tac_lines)
-                TACDialog(self, tac_text)
-                self.status.set('TAC generado exitosamente')
-            else:
-                self.errors_panel.config(state='normal')
-                self.errors_panel.delete('1.0', 'end')
-                self.errors_panel.insert('end', p.stdout + '\n' + p.stderr)
-                self.errors_panel.config(state='disabled')
-                self.status.set('Error al generar TAC')
+            # AST textual usando ANTLR
+            p = subprocess.run([sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--ast'], capture_output=True, text=True)
+            ast_text = p.stdout if p.stdout else 'No se pudo generar el AST.'
+            ASTDialog(self, ast_text)
         finally:
             os.unlink(tmp_path)
 
