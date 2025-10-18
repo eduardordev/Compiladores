@@ -1,7 +1,16 @@
-# Compiscript IDE Completo con AST y TAC integrados
 import os, sys, tempfile, subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
+
+try:
+    from antlr4 import InputStream, CommonTokenStream
+    from CompiscriptLexer import CompiscriptLexer
+    from CompiscriptParser import CompiscriptParser
+except Exception:
+    InputStream = None
+    CommonTokenStream = None
+    CompiscriptLexer = None
+    CompiscriptParser = None
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.abspath(os.path.join(HERE, '..'))
@@ -38,9 +47,7 @@ class CompiscriptIDE(tk.Tk):
         self.apply_theme(self.current_theme)
         self.bind_shortcuts()
 
-    # ======================================
-    # MENÚ
-    # ======================================
+
     def create_menu(self):
         menubar = tk.Menu(self)
 
@@ -62,7 +69,8 @@ class CompiscriptIDE(tk.Tk):
         # --- Herramientas ---
         toolsmenu = tk.Menu(menubar, tearoff=0)
         toolsmenu.add_command(label='Compilar', command=self.compilar, accelerator='F5')
-        toolsmenu.add_command(label='Ver AST', command=self.ver_ast)
+        toolsmenu.add_command(label='Ver AST (Texto)', command=self.ver_ast)
+        toolsmenu.add_command(label='Ver AST (Visual)', command=self.ver_ast_visual)
         toolsmenu.add_command(label='Ver TAC', command=self.ver_tac)
         menubar.add_cascade(label='Herramientas', menu=toolsmenu)
 
@@ -78,9 +86,6 @@ class CompiscriptIDE(tk.Tk):
 
         self.config(menu=menubar)
 
-    # ======================================
-    # INTERFAZ PRINCIPAL
-    # ======================================
     def create_widgets(self):
         container = ttk.Frame(self)
         container.pack(fill='both', expand=True)
@@ -92,16 +97,16 @@ class CompiscriptIDE(tk.Tk):
         btn_save = ttk.Button(toolbar, text='💾 Guardar', command=self.guardar)
         btn_run = ttk.Button(toolbar, text='▶ Compilar', command=self.compilar)
         btn_ast = ttk.Button(toolbar, text='🌳 AST', command=self.ver_ast)
+        btn_ast_vis = ttk.Button(toolbar, text='🌲 AST (Vis)', command=self.ver_ast_visual)
         btn_tac = ttk.Button(toolbar, text='⚙️ TAC', command=self.ver_tac)
         btn_theme = ttk.Button(toolbar, text='🌓 Tema', command=self.toggle_theme)
-        for b in (btn_open, btn_save, btn_run, btn_ast, btn_tac, btn_theme):
+        for b in (btn_open, btn_save, btn_run, btn_ast, btn_ast_vis, btn_tac, btn_theme):
             b.pack(side='left', padx=3, pady=2)
 
-        # Panel principal
         main = ttk.PanedWindow(container, orient='horizontal')
         main.pack(fill='both', expand=True)
 
-        # Sidebar izquierda
+
         sidebar = ttk.Frame(main, width=50)
         main.add(sidebar, weight=0)
         for ico, cmd, tip in [('📁', self.abrir, 'Abrir'),
@@ -110,14 +115,13 @@ class CompiscriptIDE(tk.Tk):
             b = ttk.Button(sidebar, text=ico, width=3, command=cmd)
             b.pack(pady=6)
 
-        # Centro: Editor + panel inferior
+
         center = ttk.Frame(main)
         main.add(center, weight=3)
 
         center_paned = ttk.PanedWindow(center, orient='vertical')
         center_paned.pack(fill='both', expand=True)
 
-        # Editor de código
         editor_container = ttk.Frame(center_paned)
         center_paned.add(editor_container, weight=3)
 
@@ -140,7 +144,6 @@ class CompiscriptIDE(tk.Tk):
         self.text.bind('<ButtonRelease>', self.on_text_change)
         self.update_line_numbers()
 
-        # Panel inferior dividido (Errores, AST, TAC)
         bottom_panel = ttk.PanedWindow(center_paned, orient='horizontal')
         center_paned.add(bottom_panel, weight=1)
 
@@ -160,9 +163,6 @@ class CompiscriptIDE(tk.Tk):
         lbl_pos = ttk.Label(statusbar, textvariable=self.cursor_pos, anchor='e')
         lbl_pos.pack(side='right')
 
-    # ======================================
-    # PANELES DE SALIDA
-    # ======================================
     def _create_output_panel(self, parent, title):
         frame = ttk.Frame(parent)
         label = ttk.Label(frame, text=title, anchor='center', font=('Consolas', 10, 'bold'))
@@ -172,9 +172,7 @@ class CompiscriptIDE(tk.Tk):
         text.config(state='disabled')
         return {'frame': frame, 'text': text}
 
-    # ======================================
-    # FUNCIONES DE UTILIDAD
-    # ======================================
+
     def bind_shortcuts(self):
         self.bind('<Control-o>', lambda e: self.abrir())
         self.bind('<Control-s>', lambda e: self.guardar())
@@ -200,9 +198,6 @@ class CompiscriptIDE(tk.Tk):
         self.update_line_numbers()
         self.update_cursor_pos()
 
-    # ======================================
-    # BÚSQUEDA Y REEMPLAZO
-    # ======================================
     def buscar(self):
         term = simpledialog.askstring('Buscar', 'Texto a buscar:')
         if not term:
@@ -237,9 +232,7 @@ class CompiscriptIDE(tk.Tk):
         self.update_line_numbers()
         self.status.set(f'Reemplazado "{term}" por "{repl}"')
 
-    # ======================================
-    # OPERACIONES DE ARCHIVO
-    # ======================================
+
     def abrir(self):
         path = filedialog.askopenfilename(filetypes=[('Compiscript', '*.cps'), ('Todos', '*.*')])
         if not path: return
@@ -266,9 +259,6 @@ class CompiscriptIDE(tk.Tk):
         self.current_file = path
         self.guardar()
 
-    # ======================================
-    # COMPILACIÓN Y ANÁLISIS
-    # ======================================
     def compilar(self):
         code = self.text.get('1.0', 'end-1c')
         with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
@@ -301,6 +291,167 @@ class CompiscriptIDE(tk.Tk):
         finally:
             os.unlink(tmp_path)
 
+    def ver_ast_visual(self):
+        """Show a visual AST in a new window. If ANTLR parser is importable, parse in-process
+        and build a tree; otherwise fall back to textual AST produced by Driver.py and show
+        its parsed structure (simple)."""
+        code = self.text.get('1.0', 'end-1c')
+
+        # Try in-process parse
+        tree = None
+        parser = None
+        if InputStream and CompiscriptLexer and CompiscriptParser:
+            try:
+                stream = InputStream(code)
+                lexer = CompiscriptLexer(stream)
+                tokens = CommonTokenStream(lexer)
+                parser = CompiscriptParser(tokens)
+                tree = parser.program()
+            except Exception as e:
+                tree = None
+
+        # If no in-process tree, call Driver.py --ast and parse textual tree into a simple node structure
+        textual = None
+        if tree is None:
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
+                tmp.write(code)
+                tmp_path = tmp.name
+            try:
+                p = subprocess.run([sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--ast'], capture_output=True, text=True)
+                textual = p.stdout
+            finally:
+                os.unlink(tmp_path)
+
+        # Build node structure
+        if tree is not None:
+            root = self._build_ast_tree(tree, parser)
+        else:
+            # crude textual parse: lines with parentheses from toStringTree
+            root = {'label': 'AST', 'children': []}
+            if textual:
+                # naive tokenization: treat parentheses as tree structure
+                tokens = textual.replace('(', ' ( ').replace(')', ' ) ').split()
+                stack = [root]
+                for tok in tokens:
+                    if tok == '(':
+                        # start child with next token as label
+                        continue
+                    elif tok == ')':
+                        if len(stack) > 1:
+                            stack.pop()
+                    else:
+                        node = {'label': tok, 'children': []}
+                        stack[-1]['children'].append(node)
+                        stack.append(node)
+
+        # Open visual window and draw
+        win = tk.Toplevel(self)
+        win.title('AST Visual')
+        canvas = tk.Canvas(win, background='white')
+        hbar = ttk.Scrollbar(win, orient='horizontal', command=canvas.xview)
+        vbar = ttk.Scrollbar(win, orient='vertical', command=canvas.yview)
+        canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+        hbar.pack(side='bottom', fill='x')
+        vbar.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+
+        # layout and draw nodes
+        try:
+            self._layout_and_draw(canvas, root)
+        except Exception as e:
+            canvas.create_text(10, 10, anchor='nw', text=f'Error drawing AST: {e}')
+
+    def _build_ast_tree(self, tree, parser):
+        """Convert ANTLR parse tree to a simple nested dict structure: {'label': str, 'children': [...]}
+        This walks children using getChildCount/getChild
+        """
+        def node_of(t):
+            lab = t.getText() if hasattr(t, 'getText') else str(t)
+            # prefer rule name when possible
+            try:
+                ridx = t.getRuleIndex()
+                ruleName = parser.ruleNames[ridx]
+                lab = ruleName
+            except Exception:
+                pass
+            n = {'label': lab, 'children': []}
+            try:
+                cnt = t.getChildCount()
+                for i in range(cnt):
+                    ch = t.getChild(i)
+                    n['children'].append(node_of(ch))
+            except Exception:
+                pass
+            return n
+        return node_of(tree)
+
+    def _layout_and_draw(self, canvas, root):
+        """Simple top-down layout: assign x positions by subtree width, y by depth, then draw boxes and lines."""
+        node_w = 100
+        node_h = 30
+        hsep = 20
+        vsep = 60
+
+        # compute widths
+        def compute_width(n):
+            if not n.get('children'):
+                n['_width'] = node_w
+            else:
+                w = 0
+                for c in n['children']:
+                    compute_width(c)
+                    w += c['_width'] + hsep
+                w = max(node_w, w - hsep)
+                n['_width'] = w
+        compute_width(root)
+
+        # assign positions
+        x0 = 20
+        y0 = 20
+
+        def assign_pos(n, x, y):
+            n['_x'] = x + n['_width'] / 2
+            n['_y'] = y
+            cx = x
+            for c in n['children']:
+                assign_pos(c, cx, y + vsep)
+                cx += c['_width'] + hsep
+        assign_pos(root, x0, y0)
+
+        # draw
+        def draw_node(n):
+            x = n['_x']
+            y = n['_y']
+            left = x - node_w/2
+            right = x + node_w/2
+            top = y
+            bottom = y + node_h
+            canvas.create_rectangle(left, top, right, bottom, fill='#eef', outline='#66a')
+            canvas.create_text(x, y + node_h/2, text=str(n.get('label') or ''), font=('Consolas', 9))
+            for c in n['children']:
+                cx = c['_x']
+                cy = c['_y']
+                # line from bottom center to child's top center
+                canvas.create_line(x, bottom, cx, cy, fill='#444')
+                draw_node(c)
+        draw_node(root)
+
+        # helper iterator
+        def _iter_nodes(n):
+            yield n
+            for c in n.get('children', []):
+                for x in _iter_nodes(c):
+                    yield x
+
+        # set scroll region
+        nodes = list(_iter_nodes(root))
+        minx = min(n['_x'] - node_w/2 for n in nodes)
+        maxx = max(n['_x'] + node_w/2 for n in nodes)
+        miny = min(n['_y'] for n in nodes)
+        maxy = max(n['_y'] + node_h for n in nodes)
+        canvas.config(scrollregion=(minx-20, miny-20, maxx+20, maxy+20))
+
+
     def ver_tac(self):
         code = self.text.get('1.0', 'end-1c')
         with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
@@ -315,18 +466,13 @@ class CompiscriptIDE(tk.Tk):
         finally:
             os.unlink(tmp_path)
 
-    # ======================================
-    # ACTUALIZACIÓN DE PANELES DE SALIDA
-    # ======================================
+
     def _update_output(self, panel, text):
         panel.config(state='normal')
         panel.delete('1.0', 'end')
         panel.insert('end', text if text.strip() else '(sin salida)')
         panel.config(state='disabled')
 
-    # ======================================
-    # TEMA Y ACERCA DE
-    # ======================================
     def apply_theme(self, theme_name):
         t = self.themes.get(theme_name, self.themes['dark'])
         self.configure(bg=t['bg'])

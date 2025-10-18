@@ -57,3 +57,13 @@ class SymbolTable:
 
     def resolve(self, name: str) -> Optional[Symbol]:
         return self.current.resolve(name)
+
+    # convenience aliases matching requested API
+    def push_scope(self, name: str = 'scope'):
+        self.push(name)
+
+    def pop_scope(self):
+        self.pop()
+
+    def lookup(self, name: str) -> Optional[Symbol]:
+        return self.resolve(name)

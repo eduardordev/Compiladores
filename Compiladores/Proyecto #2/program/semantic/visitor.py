@@ -84,7 +84,11 @@ class SemanticVisitor(CompiscriptVisitor):
         return None
 
     def visitBlock(self, ctx):
-        self.symtab.push('block')
+        # create a new nested scope for the block
+        try:
+            self.symtab.push_scope('block')
+        except Exception:
+            self.symtab.push('block')
         self.block_terminated.append(False)
         # recorrer statements si existen
         stmts = []
@@ -96,7 +100,10 @@ class SemanticVisitor(CompiscriptVisitor):
                 break
             self.visit(st)
         self.block_terminated.pop()
-        self.symtab.pop()
+        try:
+            self.symtab.pop_scope()
+        except Exception:
+            self.symtab.pop()
         return None
 
     def visitStatement(self, ctx):
@@ -258,32 +265,58 @@ class SemanticVisitor(CompiscriptVisitor):
     # control flow
     def visitIfStatement(self, ctx):
         cond_t = self.visit(ctx.expression())
-        if cond_t != BOOLEAN:
+        if not getattr(cond_t, 'is_boolean', lambda: False)():
             raise at(ctx, f'Condición de if debe ser boolean, obtuvo {cond_t}')
         # cuerpo(s)
         if hasattr(ctx, 'statement'):
             st = list(ctx.statement())
             if len(st) >= 1:
-                self.visit(st[0])
+                # then-branch in new scope
+                try: self.symtab.push_scope('if-then')
+                except Exception: self.symtab.push('if-then')
+                try:
+                    self.visit(st[0])
+                finally:
+                    try: self.symtab.pop_scope()
+                    except Exception: self.symtab.pop()
             if len(st) >= 2:
-                self.visit(st[1])
+                # else-branch
+                try: self.symtab.push_scope('if-else')
+                except Exception: self.symtab.push('if-else')
+                try:
+                    self.visit(st[1])
+                finally:
+                    try: self.symtab.pop_scope()
+                    except Exception: self.symtab.pop()
         return None
 
     def visitWhileStatement(self, ctx):
         cond_t = self.visit(ctx.expression())
-        if cond_t != BOOLEAN:
+        if not getattr(cond_t, 'is_boolean', lambda: False)():
             raise at(ctx, f'Condición de while debe ser boolean, obtuvo {cond_t}')
         self.in_loop += 1
-        self.visit(ctx.statement())
-        self.in_loop -= 1
+        try: self.symtab.push_scope('while')
+        except Exception: self.symtab.push('while')
+        try:
+            self.visit(ctx.statement())
+        finally:
+            try: self.symtab.pop_scope()
+            except Exception: self.symtab.pop()
+            self.in_loop -= 1
         return None
 
     def visitDoWhileStatement(self, ctx):
         self.in_loop += 1
-        self.visit(ctx.statement())
-        self.in_loop -= 1
+        try: self.symtab.push_scope('do-while')
+        except Exception: self.symtab.push('do-while')
+        try:
+            self.visit(ctx.statement())
+        finally:
+            try: self.symtab.pop_scope()
+            except Exception: self.symtab.pop()
+            self.in_loop -= 1
         cond_t = self.visit(ctx.expression())
-        if cond_t != BOOLEAN:
+        if not getattr(cond_t, 'is_boolean', lambda: False)():
             raise at(ctx, f'Condición de do-while debe ser boolean, obtuvo {cond_t}')
         return None
 
@@ -291,11 +324,17 @@ class SemanticVisitor(CompiscriptVisitor):
         # for '(' (variableDeclaration | assignment | )? ';' expression? ';' assignment? ')' statement
         if hasattr(ctx, 'expression') and ctx.expression():
             cond_t = self.visit(ctx.expression())
-            if cond_t != BOOLEAN:
+            if not getattr(cond_t, 'is_boolean', lambda: False)():
                 raise at(ctx, f'Condición de for debe ser boolean, obtuvo {cond_t}')
         self.in_loop += 1
-        self.visit(ctx.statement())
-        self.in_loop -= 1
+        try: self.symtab.push_scope('for')
+        except Exception: self.symtab.push('for')
+        try:
+            self.visit(ctx.statement())
+        finally:
+            try: self.symtab.pop_scope()
+            except Exception: self.symtab.pop()
+            self.in_loop -= 1
         return None
 
     def visitForeachStatement(self, ctx):
@@ -304,7 +343,8 @@ class SemanticVisitor(CompiscriptVisitor):
         if not cont_t or not cont_t.is_array():
             raise at(ctx, f'foreach requiere arreglo, obtuvo {cont_t}')
         loop_name = ctx.Identifier().getText()
-        self.symtab.push('foreach')
+        try: self.symtab.push_scope('foreach')
+        except Exception: self.symtab.push('foreach')
         try:
             self.symtab.define(VarSymbol(loop_name, cont_t.base, False))
         except KeyError:
@@ -312,7 +352,8 @@ class SemanticVisitor(CompiscriptVisitor):
         self.in_loop += 1
         self.visit(ctx.statement())
         self.in_loop -= 1
-        self.symtab.pop()
+        try: self.symtab.pop_scope()
+        except Exception: self.symtab.pop()
         return None
 
     def visitBreakStatement(self, ctx):
@@ -329,17 +370,21 @@ class SemanticVisitor(CompiscriptVisitor):
 
     # try/catch
     def visitTryCatchStatement(self, ctx):
-        self.symtab.push('try')
+        try: self.symtab.push_scope('try')
+        except Exception: self.symtab.push('try')
         self.visit(ctx.block(0))
-        self.symtab.pop()
-        self.symtab.push('catch')
+        try: self.symtab.pop_scope()
+        except Exception: self.symtab.pop()
+        try: self.symtab.push_scope('catch')
+        except Exception: self.symtab.push('catch')
         err_name = ctx.Identifier().getText()
         try:
             self.symtab.define(VarSymbol(err_name, STRING, False))
         except KeyError:
             raise at(ctx, f'Identificador de catch duplicado: {err_name}')
         self.visit(ctx.block(1))
-        self.symtab.pop()
+        try: self.symtab.pop_scope()
+        except Exception: self.symtab.pop()
         return None
 
     # switch/case
@@ -465,7 +510,7 @@ class SemanticVisitor(CompiscriptVisitor):
         t = self.visit(ctx.logicalAndExpr(0))
         for i in range(1, len(ctx.logicalAndExpr())):
             t2 = self.visit(ctx.logicalAndExpr(i))
-            if t != BOOLEAN or t2 != BOOLEAN:
+            if not getattr(t, 'is_boolean', lambda: False)() or not getattr(t2, 'is_boolean', lambda: False)():
                 raise at(ctx, f'Operación lógica || requiere booleanos: {t}, {t2}')
             t = BOOLEAN
         return self.set_type(ctx, BOOLEAN)
@@ -474,7 +519,7 @@ class SemanticVisitor(CompiscriptVisitor):
         t = self.visit(ctx.equalityExpr(0))
         for i in range(1, len(ctx.equalityExpr())):
             t2 = self.visit(ctx.equalityExpr(i))
-            if t != BOOLEAN or t2 != BOOLEAN:
+            if not getattr(t, 'is_boolean', lambda: False)() or not getattr(t2, 'is_boolean', lambda: False)():
                 raise at(ctx, f'Operación lógica && requiere booleanos: {t}, {t2}')
             t = BOOLEAN
         return self.set_type(ctx, BOOLEAN)
