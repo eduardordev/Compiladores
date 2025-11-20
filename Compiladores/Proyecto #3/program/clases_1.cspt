@@ -1,0 +1,17 @@
+class Persona {
+  init(n: string, e: int) {
+    this.nombre = n;
+    this.edad = e;
+  }
+  saludar(nombre: string){
+    print "Hola";
+    print nombre;
+  }
+}
+
+var juan = Persona("Juan", 20);
+
+print juan.edad;
+print juan.nombre;
+
+juan.saludar("Pedro");
