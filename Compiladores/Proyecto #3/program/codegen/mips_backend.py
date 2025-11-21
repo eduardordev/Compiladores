@@ -19,21 +19,41 @@ class MIPSBackend:
         self.temp_map = {}
         # registers available for temporals: $t0..$t9
         self.reg_pool = [f"$t{i}" for i in range(10)]
+        self.reg_usage = {reg: None for reg in self.reg_pool}  # reg -> temp name or None
+        self.spill_map = {}  # temp name -> stack offset
+        self.spill_offset = 0
         self.global_vars = set()
         self.lines: List[str] = []
         self.frame_size_map = {}  # function label -> frame size (rough)
 
     def reg_for_temp(self, tname: str) -> str:
-        if tname in self.temp_map:
-            return self.temp_map[tname]
-        # allocate based on numeric suffix if possible
-        if tname.startswith('t') and tname[1:].isdigit():
-            idx = int(tname[1:])
-            reg = f"$t{idx % 10}"
-            self.temp_map[tname] = reg
-            return reg
-        # fallback to $t0
-        return '$t0'
+        # Si ya está asignado, devuelve el registro
+        for reg, temp in self.reg_usage.items():
+            if temp == tname:
+                return reg
+        # Busca registro libre
+        for reg, temp in self.reg_usage.items():
+            if temp is None:
+                self.reg_usage[reg] = tname
+                return reg
+        # Si no hay registro libre, realiza spilling
+        # Asigna offset en stack si no existe
+        if tname not in self.spill_map:
+            self.spill_offset += 4
+            self.spill_map[tname] = self.spill_offset
+        # Usa $t9 como registro temporal para cargar/spillear
+        spill_reg = "$t9"
+        self.emit(f"    lw {spill_reg}, {self.spill_map[tname]}($sp)")
+        return spill_reg
+
+    def free_temp(self, tname: str):
+        # Libera el registro asociado al temporal
+        for reg, temp in self.reg_usage.items():
+            if temp == tname:
+                self.reg_usage[reg] = None
+                # Spillea el valor si fue usado
+                self.emit(f"    sw {reg}, {self.spill_map.get(tname, 0)}($sp)")
+                return
 
     def emit(self, s: str):
         self.lines.append(s)
@@ -50,7 +70,11 @@ class MIPSBackend:
         # simple fixed-size frame
         size = 32
         self.frame_size_map[func_label] = size
-        self.emit(f'{func_label}:')
+        # Forzar etiqueta principal como 'main:'
+        if func_label == 'func_main':
+            self.emit('main:')
+        else:
+            self.emit(f'{func_label}:')
         self.emit(f'    addi $sp, $sp, -{size}')
         self.emit(f'    sw $ra, {size-4}($sp)')
         self.emit(f'    sw $fp, {size-8}($sp)')
@@ -65,6 +89,8 @@ class MIPSBackend:
         self.emit(f'    jr $ra')
 
     def instr_to_mips(self, instr: Instr, current_func: Optional[str]):
+        # Ciclo de vida simple: libera temporales al final de cada instrucción
+        # (En un caso real, se haría análisis de liveness)
         op = instr.op
         if op == 'LABEL':
             lbl = instr.dst
@@ -90,6 +116,8 @@ class MIPSBackend:
                 self.emit(f'    beq $t9, $zero, {instr.dst}')
             else:
                 self.emit(f'    beq {ra}, $zero, {instr.dst}')
+            if isinstance(a, str) and a.startswith('t'):
+                self.free_temp(a)
             return
         if op == 'STORE':
             # STORE a -> dst
@@ -100,6 +128,7 @@ class MIPSBackend:
                 rdst = self.reg_for_temp(dst)
                 if isinstance(a, str) and a.startswith('t'):
                     self.emit(f'    move {rdst}, {self.reg_for_temp(a)}')
+                    self.free_temp(a)
                 else:
                     # immediate or var
                     if isinstance(a, str) and a.isdigit():
@@ -112,6 +141,7 @@ class MIPSBackend:
                 self.global_vars.add(dst)
                 if isinstance(a, str) and a.startswith('t'):
                     self.emit(f'    sw {self.reg_for_temp(a)}, {dst}')
+                    self.free_temp(a)
                 else:
                     # immediate
                     if isinstance(a, str) and a.isdigit():
@@ -119,6 +149,8 @@ class MIPSBackend:
                         self.emit(f'    sw $t9, {dst}')
                     else:
                         self.emit(f'    sw {a}, {dst}')
+            if dst.startswith('t'):
+                self.free_temp(dst)
             return
         if op == 'LOAD':
             dst = instr.dst
@@ -131,6 +163,8 @@ class MIPSBackend:
                 else:
                     self.global_vars.add(a)
                     self.emit(f'    lw {rd}, {a}')
+            if dst and dst.startswith('t'):
+                self.free_temp(dst)
             return
         if op in ('ADD', 'SUB', 'MUL', 'DIV'):
             dst = instr.dst
@@ -151,51 +185,54 @@ class MIPSBackend:
             if op == 'DIV':
                 self.emit(f'    div {ra}, {rb}')
                 self.emit(f'    mflo {rd}')
-            elif op == 'MUL':
-                self.emit(f'    mul {rd}, {ra}, {rb}')
-            else:
-                self.emit(f'    {mop} {rd}, {ra}, {rb}')
-            return
-        if op == 'RET':
-            # RETURN dst
-            if instr.dst:
-                # move dst to $v0
-                if isinstance(instr.dst, str) and instr.dst.startswith('t'):
-                    self.emit(f'    move $v0, {self.reg_for_temp(instr.dst)}')
-                else:
-                    # immediate
-                    self.emit(f'    li $v0, {instr.dst}')
-            # epilogue will be emitted by function handling; for simplicity emit jr $ra
-            self.emit('    jr $ra')
-            return
-        if op == 'ARG':
-            # push arg on stack (caller responsibility)
-            a = instr.a
-            if isinstance(a, str) and a.startswith('t'):
-                self.emit(f'    addi $sp, $sp, -4')
-                self.emit(f'    sw {self.reg_for_temp(a)}, 0($sp)')
-            else:
-                # immediate or var
-                if isinstance(a, str) and a.isdigit():
-                    self.emit(f'    li $t9, {a}')
-                    self.emit(f'    addi $sp, $sp, -4')
-                    self.emit(f'    sw $t9, 0($sp)')
-                else:
-                    self.emit(f'    addi $sp, $sp, -4')
-                    self.emit(f'    sw {a}, 0($sp)')
-            return
-        if op == 'CALL':
-            # CALL label; if dst present, move $v0 to dst after jal
-            func = instr.a
-            self.emit(f'    jal {func}')
-            if instr.dst:
-                if instr.dst.startswith('t'):
-                    self.emit(f'    move {self.reg_for_temp(instr.dst)}, $v0')
-                else:
-                    # store v0 to global var
-                    self.global_vars.add(instr.dst)
-                    self.emit(f'    sw $v0, {instr.dst}')
-            return
+            class MIPSBackend:
+                def __init__(self):
+                    self.lines = []
+                    self.data_lines = []
+                    self.temporals = set()
+                    self.label_count = 0
+                    self.registers = [f'$t{i}' for i in range(10)]
+                    self.reg_map = {}
+                    self.reg_usage = {}
+                    self.spill_map = {}
+                    self.spill_count = 0
+                    self.used_temporals = set()
+                    self.func_label = None
+                    self.in_func = False
+                    self.func_stack = []
+                    self.var_map = {}
+                    self.var_order = []
+                    self.return_var = None
+                    self.main_label = None
+                # ...existing code...
+                def emit_func(self, name):
+                    # Si es main, usar 'main:' y marcar como global
+                    if name == 'main':
+                        self.func_label = 'main'
+                        self.main_label = 'main'
+                        self.lines.append('main:')
+                    else:
+                        label = f'func_{name}'
+                        self.func_label = label
+                        self.lines.append(f'{label}:')
+                    self.in_func = True
+                    self.lines.append('    addi $sp, $sp, -32')
+                    self.lines.append('    sw $ra, 28($sp)')
+                    self.lines.append('    sw $fp, 24($sp)')
+                    self.lines.append('    move $fp, $sp')
+                # ...existing code...
+                def emit(self):
+                    out = []
+                    out.append('.data')
+                    for line in self.data_lines:
+                        out.append(line)
+                    out.append('.text')
+                    # Siempre agregar .globl main
+                    out.append('.globl main')
+                    for line in self.lines:
+                        out.append(line)
+                    return '\n'.join(out)
+                    # Eliminar código muerto y corregir indentación inesperada
 
     def emit_from_emitter(self, emitter: Emitter, out_path: Optional[str]=None) -> str:
         # scan emitter for labels and global vars
@@ -214,17 +251,8 @@ class MIPSBackend:
         for f in list(self.frame_size_map.keys()):
             self.epilogue(f)
 
-        # emit data section
-        data_lines = []
-        if self.global_vars:
-            data_lines.append('.data')
-            for v in sorted(self.global_vars):
-                data_lines.append(f'{v}: .word 0')
-            data_lines.append('')
-
-        # compose final output: data then text
-        out_lines = data_lines + ['.text'] + self.lines
-        out = '\n'.join(out_lines)
+        # Usar el método emit() para salida final
+        out = self.emit()
         if out_path:
             with open(out_path, 'w', encoding='utf-8') as f:
                 f.write(out)

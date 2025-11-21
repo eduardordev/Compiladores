@@ -55,8 +55,8 @@ def run_mips(filepath: str) -> int:
     # output path: same dir, same base name with .s
     out_path = os.path.splitext(filepath)[0] + '.s'
     mips = emit_mips(emitter, sem_visitor.symtab if sem_visitor else None, out_path=out_path)
+    # Solo imprime el código ensamblador, no el mensaje de guardado
     print(mips)
-    print(f'ASM guardado en: {out_path}')
     return 0
 
     return 0

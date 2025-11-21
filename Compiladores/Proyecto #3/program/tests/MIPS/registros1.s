@@ -1,0 +1,130 @@
+.data
+a: .word 0
+b: .word 0
+c: .word 0
+d: .word 0
+e: .word 0
+f: .word 0
+g: .word 0
+h: .word 0
+i: .word 0
+j: .word 0
+k: .word 0
+r1: .word 0
+r10: .word 0
+r2: .word 0
+r3: .word 0
+r4: .word 0
+r5: .word 0
+r6: .word 0
+r7: .word 0
+r8: .word 0
+r9: .word 0
+.text
+func_main:
+    addi $sp, $sp, -32
+    sw $ra, 28($sp)
+    sw $fp, 24($sp)
+    move $fp, $sp
+    li $t9, 1
+    sw $t9, a
+    li $t9, 2
+    sw $t9, b
+    li $t9, 3
+    sw $t9, c
+    li $t9, 4
+    sw $t9, d
+    li $t9, 5
+    sw $t9, e
+    li $t9, 6
+    sw $t9, f
+    li $t9, 7
+    sw $t9, g
+    li $t9, 8
+    sw $t9, h
+    li $t9, 9
+    sw $t9, i
+    li $t9, 10
+    sw $t9, j
+    li $t9, 11
+    sw $t9, k
+    lw $t0, a
+    sw $t0, 0($sp)
+    lw $t0, b
+    sw $t0, 0($sp)
+    sw $t0, r1
+    sw $t0, 0($sp)
+    lw $t0, c
+    sw $t0, 0($sp)
+    lw $t0, d
+    sw $t0, 0($sp)
+    sw $t0, r2
+    sw $t0, 0($sp)
+    lw $t0, e
+    sw $t0, 0($sp)
+    lw $t0, f
+    sw $t0, 0($sp)
+    sw $t0, r3
+    sw $t0, 0($sp)
+    lw $t0, g
+    sw $t0, 0($sp)
+    lw $t0, h
+    sw $t0, 0($sp)
+    sw $t0, r4
+    sw $t0, 0($sp)
+    lw $t0, i
+    sw $t0, 0($sp)
+    lw $t0, j
+    sw $t0, 0($sp)
+    lw $t9, 4($sp)
+    sw $t0, r5
+    sw $t0, 0($sp)
+    lw $t0, k
+    sw $t0, 0($sp)
+    lw $t0, r1
+    sw $t0, 0($sp)
+    lw $t9, 8($sp)
+    lw $t9, 12($sp)
+    sw $t0, r6
+    sw $t0, 0($sp)
+    lw $t0, r2
+    sw $t0, 0($sp)
+    lw $t0, r3
+    sw $t0, 0($sp)
+    lw $t9, 16($sp)
+    lw $t9, 20($sp)
+    sw $t0, r7
+    sw $t0, 0($sp)
+    lw $t0, r4
+    sw $t0, 0($sp)
+    lw $t0, r5
+    sw $t0, 0($sp)
+    lw $t9, 24($sp)
+    lw $t9, 28($sp)
+    sw $t0, r8
+    sw $t0, 0($sp)
+    lw $t0, r6
+    sw $t0, 0($sp)
+    lw $t0, r7
+    sw $t0, 0($sp)
+    lw $t9, 32($sp)
+    lw $t9, 36($sp)
+    sw $t0, r9
+    sw $t0, 0($sp)
+    lw $t0, r8
+    sw $t0, 0($sp)
+    lw $t0, r9
+    sw $t0, 0($sp)
+    lw $t9, 40($sp)
+    lw $t9, 44($sp)
+    sw $t0, r10
+    sw $t0, 0($sp)
+    lw $t0, r10
+    sw $t0, 0($sp)
+end_main:
+    move $sp, $fp
+    lw $ra, 28($sp)
+    lw $fp, 24($sp)
+    addi $sp, $sp, 32
+    jr $ra
+

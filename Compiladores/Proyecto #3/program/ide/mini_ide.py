@@ -102,7 +102,8 @@ class CompiscriptIDE(tk.Tk):
         btn_tac = ttk.Button(toolbar, text='⚙️ TAC', command=self.ver_tac)
         btn_save_tac = ttk.Button(toolbar, text='💾 TAC', command=self.guardar_cspt)
         btn_theme = ttk.Button(toolbar, text='🌓 Tema', command=self.toggle_theme)
-        for b in (btn_open, btn_save, btn_run, btn_ast, btn_ast_vis, btn_tac, btn_save_tac, btn_theme):
+        btn_misp = ttk.Button(toolbar, text='💾 MISP', command=self.guardar_misp)
+        for b in (btn_open, btn_save, btn_run, btn_ast, btn_ast_vis, btn_tac, btn_save_tac, btn_theme, btn_misp):
             b.pack(side='left', padx=3, pady=2)
 
         main = ttk.PanedWindow(container, orient='horizontal')
@@ -484,6 +485,67 @@ class CompiscriptIDE(tk.Tk):
             self.status.set(f'TAC guardado en {os.path.basename(path)}')
         except Exception as e:
             messagebox.showerror('Error al guardar', f'No se pudo escribir el archivo: {e}')
+
+    def guardar_misp(self):
+        # Genera TAC primero y valida
+        tac_text, retcode, errors = self._generate_tac()
+        tac_clean = tac_text.strip()
+        if retcode != 0 or not tac_clean:
+            if retcode != 0:
+                messagebox.showerror('Error al generar TAC', errors or 'No se pudo generar TAC.')
+            else:
+                messagebox.showinfo('Sin TAC', 'No se generó código intermedio para guardar como MIPS.')
+            return
+        # Guardar archivo MIPS
+        path = filedialog.asksaveasfilename(
+            defaultextension='.s',
+            filetypes=[('MIPS Assembly', '*.s'), ('Todos', '*.*')],
+            title='Guardar MIPS como .s'
+        )
+        if not path:
+            return
+        # Generar MIPS usando generate_tac.run_mips
+        import tempfile
+        import importlib.util
+        tac_file = None
+        try:
+            tac_file = tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8')
+            tac_file.write(self.text.get('1.0', 'end-1c'))
+            tac_file.close()
+            # Importar generate_tac dinámicamente
+            gen_path = os.path.join(ROOT, 'codegen', 'generate_tac.py')
+            spec = importlib.util.spec_from_file_location('generate_tac', gen_path)
+            gen_tac = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(gen_tac)
+            # Ejecutar run_mips y capturar salida
+            import io
+            import contextlib
+            mips_output = ''
+            with contextlib.redirect_stdout(io.StringIO()) as f:
+                gen_tac.run_mips(tac_file.name)
+                mips_output = f.getvalue()
+            # Filtrar solo las líneas de MIPS, sin encabezados, errores ni comentarios
+            mips_lines = mips_output.splitlines()
+            mips_code = []
+            in_section = False
+            for line in mips_lines:
+                lstr = line.strip()
+                if lstr.startswith('.data') or lstr.startswith('.text'):
+                    in_section = True
+                if in_section and lstr and not lstr.startswith('#') and not lstr.startswith('[') and not lstr.lower().startswith('error'):
+                    mips_code.append(line)
+            mips_code_str = '\n'.join(mips_code).strip()
+            if not mips_code_str:
+                messagebox.showinfo('Sin MIPS', 'No se generó código MIPS para guardar.')
+                return
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(mips_code_str + ('\n' if not mips_code_str.endswith('\n') else ''))
+            self.status.set(f'MIPS guardado en {os.path.basename(path)}')
+        except Exception as e:
+            messagebox.showerror('Error al guardar', f'No se pudo escribir el archivo MIPS: {e}')
+        finally:
+            if tac_file:
+                os.unlink(tac_file.name)
 
     def _generate_tac(self):
         code = self.text.get('1.0', 'end-1c')
