@@ -31,6 +31,15 @@ class Instr:
             return f"STORE {self.a} -> {self.dst}"
         if self.op == "LOAD":
             return f"{self.dst} = LOAD {self.a}"
+        if self.op == "NEWOBJ":
+            # NEWOBJ dst, ClassName
+            return f"NEWOBJ {self.dst}, {self.a}"
+        if self.op == "GETPROP":
+            # GETPROP dst, obj, prop
+            return f"GETPROP {self.dst}, {self.a}, {self.b}"
+        if self.op == "SETPROP":
+            # SETPROP obj, prop, value
+            return f"SETPROP {self.dst}, {self.a}, {self.b}"
         if self.op == "RET":
             return f"RETURN {self.dst or ''}".strip()
         if self.b:

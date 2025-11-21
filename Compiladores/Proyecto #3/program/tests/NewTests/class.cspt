@@ -1,0 +1,9 @@
+// TAC generado por Compiscript IDE
+=== Código Intermedio (TAC) ===
+
+NEWOBJ t0, Persona
+STORE t0 -> p
+t0 = LOAD p
+SETPROP t0, nombre, "Juan"
+
+===============================

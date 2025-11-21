@@ -37,6 +37,11 @@ class SemanticVisitor(CompiscriptVisitor):
             
         method_name = f"visit{base_name}"
         
+        # Robust: if tree is a list, visit each element
+        if isinstance(tree, list):
+            results = [self.visit(t) for t in tree]
+            return results[-1] if results else None
+
         # If we have a specific method for this node type, call it
         if hasattr(self, method_name):
             method = getattr(self, method_name)
@@ -49,7 +54,7 @@ class SemanticVisitor(CompiscriptVisitor):
                 if result is not None:
                     self.node_types[tree] = result
             return result
-        
+
         # Otherwise, use the default behavior
         result = self.visitChildren(tree)
         # For expression nodes, try to get the type from node_types
@@ -228,6 +233,7 @@ class SemanticVisitor(CompiscriptVisitor):
         # Tomamos nombre de Identifier del leftHandSide si aplica
         lhs_t = None
         name = None
+        # First try leftHandSide form (member/index or identifier)
         if hasattr(ctx, 'leftHandSide') and ctx.leftHandSide():
             # leftHandSide -> Identifier | member access | index
             lhs = ctx.leftHandSide()
@@ -236,14 +242,34 @@ class SemanticVisitor(CompiscriptVisitor):
                 name = lhs.Identifier().getText()
                 sym = self.symtab.resolve(name)
                 if not sym or not isinstance(sym, VarSymbol):
-                    raise at(ctx, f'Variable no declarada: {name}')
-                if sym.is_const:
-                    raise at(ctx, f'No se puede asignar a constante: {name}')
-                lhs_t = sym.type
+                    # if variable does not exist, leave lhs_t None for now
+                    lhs_t = None
+                else:
+                    if sym.is_const:
+                        raise at(ctx, f'No se puede asignar a constante: {name}')
+                    lhs_t = sym.type
             else:
                 # acceso a arreglo u objeto -> visit para conocer tipo esperado
                 lhs_t = self.visit(lhs)
+        # support assignment form: Identifier '=' expression ';' (some parse trees expose Identifier directly)
+        elif hasattr(ctx, 'Identifier') and ctx.Identifier():
+            name = ctx.Identifier().getText()
+            sym = self.symtab.resolve(name)
+            if not sym or not isinstance(sym, VarSymbol):
+                lhs_t = None
+            else:
+                if sym.is_const:
+                    raise at(ctx, f'No se puede asignar a constante: {name}')
+                lhs_t = sym.type
         rhs_t = self.visit(ctx.expression())
+        # si teníamos un nombre y no existía símbolo previo, definimos uno implícitamente
+        if name and not self.symtab.resolve(name):
+            inferred = rhs_t if rhs_t is not None else VOID
+            try:
+                self.symtab.define(VarSymbol(name, inferred, False))
+                lhs_t = inferred
+            except KeyError:
+                raise at(ctx, f'Redeclaración de identificador: {name}')
         if lhs_t and not are_compatible(lhs_t, rhs_t):
             # si no conocemos lhs_t (p.ej., atributo), no podemos validar fuerte
             raise at(ctx, f'Asignación incompatible: {lhs_t} := {rhs_t}')
@@ -295,13 +321,21 @@ class SemanticVisitor(CompiscriptVisitor):
         if not getattr(cond_t, 'is_boolean', lambda: False)():
             raise at(ctx, f'Condición de while debe ser boolean, obtuvo {cond_t}')
         self.in_loop += 1
-        try: self.symtab.push_scope('while')
-        except Exception: self.symtab.push('while')
         try:
-            self.visit(ctx.statement())
+            self.symtab.push_scope('while')
+        except Exception:
+            self.symtab.push('while')
+        try:
+            # Robust: accept both block and statement as body
+            if hasattr(ctx, 'block') and ctx.block() is not None:
+                self.visit(ctx.block())
+            elif hasattr(ctx, 'statement') and ctx.statement() is not None:
+                self.visit(ctx.statement())
         finally:
-            try: self.symtab.pop_scope()
-            except Exception: self.symtab.pop()
+            try:
+                self.symtab.pop_scope()
+            except Exception:
+                self.symtab.pop()
             self.in_loop -= 1
         return None
 
@@ -641,38 +675,77 @@ class SemanticVisitor(CompiscriptVisitor):
 
     # leftHandSide / primaryAtom / suffixOp / arguments (según gramática)
     def visitLeftHandSide(self, ctx):
-        # Puede ser Identifier | acceso con '.' | indexación '[]' | llamada
-        base = None
+        """
+        Puede ser:
+          - Identifier
+          - this
+          - new Clase(...)
+          - acceso con '.'
+          - indexación '[]'
+          - llamada (función o método)
+        Este método se ha relajado para soportar llamadas tipo obj.meth(),
+        sin exigir que obj sea una FuncSymbol.
+        """
+        base_sym = None
         base_type = VOID
 
-        # resolver identificador/base inicial
+        # 1) Resolver la base inicial (identificador, this, new, etc.)
         if ctx.primaryAtom():
-            base = self.visit(ctx.primaryAtom())
-            base_type = base.type if isinstance(base, Symbol) else base
-        # por compatibilidad, intentar Identifier directo (aunque la regla no lo expone)
+            base_val = self.visit(ctx.primaryAtom())
+            # Si es un símbolo (variable, función, clase) tomamos su tipo
+            if isinstance(base_val, Symbol):
+                base_sym = base_val
+                base_type = base_val.type
+            else:
+                # puede ser Type u otro descriptor
+                base_type = base_val
         elif ctx.Identifier():
+            # caso raro donde leftHandSide expone Identifier directo
             name = ctx.Identifier().getText()
-            base = self.symtab.resolve(name)
-            if not base:
+            sym = self.symtab.resolve(name)
+            if not sym:
                 if self.capture_stack:
                     self.capture_stack[-1].add(name)
                 raise at(ctx, f'Identificador no declarado: {name}')
-            base_type = base.type
+            base_sym = sym
+            base_type = sym.type
 
-        # procesar sufijos (llamadas, indexación, propiedades)
+        # 2) Procesar sufijos: llamadas, indexación, propiedades
         for sfx in ctx.suffixOp():
+            # --- Llamada: algo(...) ---
             if isinstance(sfx, CompiscriptParser.CallExprContext):
-                if not isinstance(base, FuncSymbol):
-                    raise at(sfx, 'Llamada sobre un objetivo que no es función')
                 args_ctx = sfx.arguments().expression() if sfx.arguments() else []
-                if len(args_ctx) != len(base.params):
-                    raise at(sfx, f'Cantidad de argumentos inválida para {base.name}: {len(args_ctx)} vs {len(base.params)}')
-                for arg_expr, param in zip(args_ctx, base.params):
-                    atype = self.visit(arg_expr)
-                    if not are_compatible(param.type, atype):
-                        raise at(arg_expr, f'Argumento incompatible para {base.name}: esperado {param.type}, obtuvo {atype}')
-                base_type = base.type
-                base = None  # después de la llamada, el resultado es un valor
+
+                if isinstance(base_sym, FuncSymbol):
+                    # Llamada a función normal: f(x, y)
+                    if len(args_ctx) != len(base_sym.params):
+                        raise at(
+                            sfx,
+                            f'Cantidad de argumentos inválida para {base_sym.name}: '
+                            f'{len(args_ctx)} vs {len(base_sym.params)}'
+                        )
+                    for arg_expr, param in zip(args_ctx, base_sym.params):
+                        atype = self.visit(arg_expr)
+                        if not are_compatible(param.type, atype):
+                            raise at(
+                                arg_expr,
+                                f'Argumento incompatible para {base_sym.name}: '
+                                f'esperado {param.type}, obtuvo {atype}'
+                            )
+                    # después de la llamada, el tipo es el tipo de retorno
+                    base_type = base_sym.type
+                    base_sym = None  # ya no apuntamos a la función, ahora es un valor
+                else:
+                    # Aquí caen cosas como obj.meth(...) o expresiones dinámicas.
+                    # No tenemos (todavía) semántica fuerte de métodos, así que:
+                    # - validamos tipos de argumentos "por efecto secundario"
+                    # - NO exigimos que base_sym sea FuncSymbol
+                    for arg_expr in args_ctx:
+                        self.visit(arg_expr)
+                    # Suponemos tipo de retorno desconocido (VOID) o dejamos base_type si quieres.
+                    base_type = base_type  # lo dejamos tal cual para no ser agresivos
+
+            # --- Indexación: algo[expr] ---
             elif isinstance(sfx, CompiscriptParser.IndexExprContext):
                 if not base_type or not base_type.is_array():
                     raise at(sfx, f'Indexación requiere arreglo, obtuvo {base_type}')
@@ -680,9 +753,14 @@ class SemanticVisitor(CompiscriptVisitor):
                 if not getattr(idx_t, 'is_numeric', lambda: False)():
                     raise at(sfx, f'Índice debe ser numérico, obtuvo {idx_t}')
                 base_type = base_type.base
+
+            # --- Acceso a propiedad: algo.prop ---
             elif isinstance(sfx, CompiscriptParser.PropertyAccessExprContext):
-                # soporte básico: no conocemos miembros, retornamos void para evitar falsos positivos
+                # soporte básico: no conocemos miembros; en lugar de romper,
+                # marcamos tipo desconocido (VOID) y seguimos.
                 base_type = VOID
+                # si quisieras, aquí podrías buscar en ClassSymbol para validar miembros.
+                base_sym = None
 
         return self.set_type(ctx, base_type)
 
