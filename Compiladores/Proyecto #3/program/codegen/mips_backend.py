@@ -47,12 +47,13 @@ class MIPSBackend:
         return spill_reg
 
     def free_temp(self, tname: str):
-        # Libera el registro asociado al temporal
+        # Libera el registro asociado al temporal SOLO si ya no se usará más
         for reg, temp in self.reg_usage.items():
             if temp == tname:
                 self.reg_usage[reg] = None
                 # Spillea el valor si fue usado
-                self.emit(f"    sw {reg}, {self.spill_map.get(tname, 0)}($sp)")
+                if tname in self.spill_map:
+                    self.emit(f"    sw {reg}, {self.spill_map[tname]}($sp)")
                 return
 
     def emit(self, s: str):
@@ -185,77 +186,50 @@ class MIPSBackend:
             if op == 'DIV':
                 self.emit(f'    div {ra}, {rb}')
                 self.emit(f'    mflo {rd}')
-            class MIPSBackend:
-                def __init__(self):
-                    self.lines = []
-                    self.data_lines = []
-                    self.temporals = set()
-                    self.label_count = 0
-                    self.registers = [f'$t{i}' for i in range(10)]
-                    self.reg_map = {}
-                    self.reg_usage = {}
-                    self.spill_map = {}
-                    self.spill_count = 0
-                    self.used_temporals = set()
-                    self.func_label = None
-                    self.in_func = False
-                    self.func_stack = []
-                    self.var_map = {}
-                    self.var_order = []
-                    self.return_var = None
-                    self.main_label = None
-                # ...existing code...
-                def emit_func(self, name):
-                    # Si es main, usar 'main:' y marcar como global
-                    if name == 'main':
-                        self.func_label = 'main'
-                        self.main_label = 'main'
-                        self.lines.append('main:')
-                    else:
-                        label = f'func_{name}'
-                        self.func_label = label
-                        self.lines.append(f'{label}:')
-                    self.in_func = True
-                    self.lines.append('    addi $sp, $sp, -32')
-                    self.lines.append('    sw $ra, 28($sp)')
-                    self.lines.append('    sw $fp, 24($sp)')
-                    self.lines.append('    move $fp, $sp')
-                # ...existing code...
-                def emit(self):
-                    out = []
-                    out.append('.data')
-                    for line in self.data_lines:
-                        out.append(line)
-                    out.append('.text')
-                    # Siempre agregar .globl main
-                    out.append('.globl main')
-                    for line in self.lines:
-                        out.append(line)
-                    return '\n'.join(out)
-                    # Eliminar código muerto y corregir indentación inesperada
+            else:
+                self.emit(f'    {mop} {rd}, {ra}, {rb}')
+            # Liberar solo los operandos, NO el resultado
+            if isinstance(a, str) and a.startswith('t') and a != dst:
+                self.free_temp(a)
+            if isinstance(b, str) and b.startswith('t') and b != dst:
+                self.free_temp(b)
+            # El resultado (dst) se mantiene hasta que se sobrescriba o se use en otra instrucción
+            return
 
     def emit_from_emitter(self, emitter: Emitter, out_path: Optional[str]=None) -> str:
-        # scan emitter for labels and global vars
+        # Escanear para detectar variables globales primero
+        for instr in emitter.instrs:
+            if instr.op == 'STORE' and not instr.dst.startswith('t'):
+                self.global_vars.add(instr.dst)
+            elif instr.op == 'LOAD' and isinstance(instr.a, str) and not instr.a.isdigit() and not instr.a.startswith('t'):
+                self.global_vars.add(instr.a)
+        
+        # Emitir sección de datos
+        self.emit_data_for_globals()
+        
+        # Emitir sección de código
+        self.emit('.text')
+        self.emit('.globl main')
+        self.emit('')
+        
+        # Procesar instrucciones
         current_func = None
         for instr in emitter.instrs:
-            # simple detection of function label
             if instr.op == 'LABEL' and instr.dst and instr.dst.startswith('func_'):
                 current_func = instr.dst
             self.instr_to_mips(instr, current_func)
-            # if label was a function, after finishing func body we should emit epilogue
-            if instr.op == 'LABEL' and instr.dst and instr.dst.startswith('func_'):
-                # placeholder: epilogue will be emitted when RET encountered; but ensure at end
-                pass
-
-        # emit epilogue for any function if not present: naive approach - append epilogue at end
+        
+        # Emitir epilogos de funciones
         for f in list(self.frame_size_map.keys()):
             self.epilogue(f)
-
-        # Usar el método emit() para salida final
-        out = self.emit()
+        
+        # Unir todas las líneas
+        out = '\n'.join(self.lines)
+        
         if out_path:
             with open(out_path, 'w', encoding='utf-8') as f:
                 f.write(out)
+        
         return out
 
 
