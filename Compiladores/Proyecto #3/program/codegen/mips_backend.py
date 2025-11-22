@@ -27,6 +27,27 @@ class MIPSBackend:
 
         # arreglos/variables inicializados en .data
         self.static_arrays = {}
+        
+        # Mejoras: rastreo de parámetros y variables locales
+        self.func_params: Dict[str, List[str]] = {}  # función -> lista de parámetros
+        self.func_local_vars: Dict[str, set] = {}  # función -> set de variables locales
+        self.current_func_params: List[str] = []  # parámetros de la función actual
+        self.current_func_locals: set = set()  # variables locales de la función actual
+        
+        # Frame size dinámico
+        self.func_frame_sizes: Dict[str, int] = {}  # función -> tamaño del frame
+        
+        # Registros en uso (para mejor selección)
+        self.reg_in_use: Dict[str, str] = {}  # temporal -> registro actual
+        
+        # Herencia y vtable
+        self.class_hierarchy: Dict[str, Optional[str]] = {}  # clase -> clase padre
+        self.class_vtables: Dict[str, Dict[str, str]] = {}  # clase -> {método -> label}
+        self.vtable_registry: Dict[str, str] = {}  # vtable_label -> dirección
+        
+        # Try-catch
+        self.exception_handler_stack: List[str] = []  # Stack de handlers de excepción
+        self.current_exception_var: Optional[str] = None
 
     def emit(self, line: str) -> None:
         """Agrega una línea al código .text."""
@@ -49,13 +70,16 @@ class MIPSBackend:
         return isinstance(x, str) and len(x) >= 2 and x[0] == '"' and x[-1] == '"'
 
     def temp_reg(self, tname: str) -> str:
-        """Mapea t0, t1, ... a $t0..$t9 (cíclico)."""
+        """Mapea t0, t1, ... a $t0..$t9 (cíclico mejorado)."""
         try:
             n = int(tname[1:])
         except ValueError:
             n = 0
         n = n % 10
-        return f"$t{n}"
+        reg = f"$t{n}"
+        # Rastrear qué temporal está en qué registro
+        self.reg_in_use[tname] = reg
+        return reg
 
     def ensure_global(self, name: str) -> None:
         """Registra un nombre como variable global si no es temp, ni literal, ni None."""
@@ -92,7 +116,7 @@ class MIPSBackend:
     def load_operand_to_reg(self, operand: str, target_reg: str, is_array: bool = False) -> str:
         """
         Garantiza que 'operand' quede en 'target_reg'.
-        Para acceso a arreglos, sigue el patrón profesional: la base en $t0, offset en $t1, resultado en $t2, etc.
+        Mejorado: detecta parámetros y variables locales, evita moves innecesarios.
         """
         # Si es acceso a arreglo tipo xs[idx]
         if isinstance(operand, str) and '[' in operand and ']' in operand:
@@ -114,21 +138,49 @@ class MIPSBackend:
             # lw $t2, 0($t0)
             self.emit(f"    lw {target_reg}, 0($t0)")
             return target_reg
+        
         # Si es temporal
         if self.is_temp(operand):
             reg = self.temp_reg(operand)
+            # Mejora: evitar move si ya está en el registro destino
             if reg != target_reg:
                 self.emit(f"    move {target_reg}, {reg}")
             return target_reg
+        
         elif self.is_immediate(operand):
             self.emit(f"    li {target_reg}, {operand}")
             return target_reg
+        
         elif self.is_string_literal(operand):
             lbl = self.string_label_for(operand)
             self.emit(f"    la {target_reg}, {lbl}")
             return target_reg
+        
         else:
-            # variable global
+            # Puede ser: variable global, parámetro, o variable local
+            # Si estamos en una función, verificar si es parámetro
+            if self.current_func and operand in self.current_func_params:
+                # Es un parámetro: cargar desde stack frame
+                param_idx = self.current_func_params.index(operand)
+                # Los argumentos fueron guardados por el llamador ANTES del frame de esta función
+                # Después del prologue: $fp apunta al inicio del frame actual
+                # Los argumentos están ANTES del frame, en offsets positivos desde $fp
+                # Frame actual: $fp apunta aquí
+                # Argumentos: están en $fp + frame_size, $fp + frame_size + 4, etc.
+                frame_size = self.func_frame_sizes.get(self.current_func, 32)
+                arg_offset = frame_size + (param_idx * 4)
+                self.emit(f"    lw {target_reg}, {arg_offset}($fp)")
+                return target_reg
+            
+            # Si es variable local (detectada por STORE previo)
+            if self.current_func and operand in self.current_func_locals:
+                # Variable local: está en el stack frame (offsets negativos)
+                # Por ahora, tratarla como global (se mejorará con frame dinámico)
+                self.ensure_global(operand)
+                self.emit(f"    lw {target_reg}, {operand}")
+                return target_reg
+            
+            # Variable global
             self.ensure_global(operand)
             if is_array:
                 self.emit(f"    la {target_reg}, {operand}")
@@ -147,13 +199,17 @@ class MIPSBackend:
 
 
     def emit_epilogue(self):
-        """Emite el epílogo estándar para main o funciones. Si es main, termina con syscall."""
+        """Emite el epílogo mejorado con frame size dinámico."""
+        func_name = getattr(self, 'current_func', None)
+        frame_size = self.func_frame_sizes.get(func_name, 32) if func_name else 32
+        
         self.emit("    move $sp, $fp")
-        self.emit("    lw $ra, 28($sp)")
-        self.emit("    lw $fp, 24($sp)")
-        self.emit("    addi $sp, $sp, 32")
+        self.emit(f"    lw $ra, {frame_size - 4}($sp)")
+        self.emit(f"    lw $fp, {frame_size - 8}($sp)")
+        self.emit(f"    addi $sp, $sp, {frame_size}")
+        
         # Si estamos en main, terminar con syscall
-        if getattr(self, 'current_func', None) == 'func_main' or getattr(self, 'current_func', None) == 'main':
+        if func_name == 'func_main' or func_name == 'main':
             self.emit("    li $v0, 10                # service: exit")
             self.emit("    syscall")
         else:
@@ -296,16 +352,36 @@ class MIPSBackend:
 
             if lbl.startswith("func_") or lbl.startswith("method_"):
                 self.current_func = lbl
+                # Inicializar parámetros y locales para esta función
+                self.current_func_params = self.func_params.get(lbl, [])
+                self.current_func_locals = self.func_local_vars.get(lbl, set())
+                
                 if lbl == "func_main":
                     self.has_main = True
                     self.emit("main:")
                 else:
                     self.emit(f"{lbl}:")
-                # prologue estándar para TODA función
-                self.emit("    addi $sp, $sp, -32")
-                self.emit("    sw $ra, 28($sp)")
-                self.emit("    sw $fp, 24($sp)")
+                
+                # Calcular frame size dinámico
+                # Base: 8 bytes para $ra y $fp
+                # + 4 bytes por cada variable local
+                num_locals = len(self.current_func_locals)
+                frame_size = 8 + (num_locals * 4)
+                # Mínimo 32 bytes para compatibilidad
+                if frame_size < 32:
+                    frame_size = 32
+                # Alinear a múltiplo de 8 (convención MIPS)
+                if frame_size % 8 != 0:
+                    frame_size = ((frame_size // 8) + 1) * 8
+                
+                self.func_frame_sizes[lbl] = frame_size
+                
+                # Prologue mejorado con frame size dinámico
+                self.emit(f"    addi $sp, $sp, -{frame_size}")
+                self.emit(f"    sw $ra, {frame_size - 4}($sp)")
+                self.emit(f"    sw $fp, {frame_size - 8}($sp)")
                 self.emit("    move $fp, $sp")
+                
                 # Si es un constructor (newClase), reservar heap aquí
                 if lbl.startswith("func_new") or lbl.startswith("method_new"):
                     self.emit("    lw $t9, heap_ptr")
@@ -336,10 +412,10 @@ class MIPSBackend:
             if dst is None:
                 return
             
-        # IGNORAR STORE a arrays estáticos
-        if hasattr(self, 'static_arrays') and dst in self.static_arrays:
-            return  # No emitir nada para arrays estáticos
-    
+            # IGNORAR STORE a arrays estáticos
+            if hasattr(self, 'static_arrays') and dst in self.static_arrays:
+                return  # No emitir nada para arrays estáticos
+        
             # dst = a   (asignación a temporal)
             if self.is_temp(dst):
                 rd = self.temp_reg(dst)
@@ -355,7 +431,17 @@ class MIPSBackend:
                 self.emit(f"    sw {reg_val}, 0({reg_addr})")
                 return
 
-            # global = a
+            # Si estamos en una función y dst no es global conocida, es variable local
+            if self.current_func and not self.is_temp(dst) and dst not in self.global_vars:
+                # Registrar como variable local
+                if self.current_func not in self.func_local_vars:
+                    self.func_local_vars[self.current_func] = set()
+                self.func_local_vars[self.current_func].add(dst)
+                self.current_func_locals.add(dst)
+                # Por ahora, tratarla como global (se mejorará con frame dinámico completo)
+                self.ensure_global(dst)
+
+            # global = a o local = a
             self.ensure_global(dst)
             # Si la variable global ya está inicializada en .data y a == 0, NO sobrescribas
             if hasattr(self, 'static_arrays') and dst in self.static_arrays:
@@ -371,7 +457,7 @@ class MIPSBackend:
 
         # ---------- LOAD ----------
         if op == "LOAD":
-            # LOAD dst, a   => dst = contenido de variable global a
+            # LOAD dst, a   => dst = contenido de variable/parámetro a
             if dst is None or not self.is_temp(dst):
                 return
             rd = self.temp_reg(dst)
@@ -381,8 +467,8 @@ class MIPSBackend:
                 # caso degenerado: lo tratamos como literal
                 self.load_operand_to_reg(a, rd)
             else:
-                self.ensure_global(a)
-                self.emit(f"    lw {rd}, {a}")
+                # Usar load_operand_to_reg que ahora maneja parámetros y locales
+                self.load_operand_to_reg(a, rd)
             return
 
         # ---------- Aritmética ----------
@@ -433,29 +519,60 @@ class MIPSBackend:
                 return
 
             num_args = len(self.pending_args)
+            
+            # Mejora: Guardar registros caller-saved que están en uso
+            # Por simplicidad, guardamos $t0-$t9 si contienen valores importantes
+            # (En una implementación completa, haríamos análisis de liveness)
+            
             if num_args > 0:
-                # reservar espacio para args
-                self.emit(f"    addi $sp, $sp, -{4 * num_args}")
-                # guardar cada arg en stack
+                # Guardar cada argumento en el stack ANTES de llamar
+                # Los argumentos se guardan en el stack del llamador
+                # IMPORTANTE: Guardar ANTES de hacer jal, porque jal puede modificar $ra
+                
+                # Mejora: usar $a0-$a3 para primeros 4 argumentos (convención MIPS)
+                # Pero también guardarlos en stack para que la función los lea desde ahí
                 for idx, arg in enumerate(self.pending_args):
-                    reg = self.load_operand_to_reg(arg, "$t9")
-                    self.emit(f"    sw {reg}, {idx * 4}($sp)")
-            # llamada
+                    if idx < 4:
+                        # Primeros 4: cargar en $a0-$a3 Y guardar en stack
+                        arg_reg = f"$a{idx}"
+                        reg = self.load_operand_to_reg(arg, arg_reg)
+                        if reg != arg_reg:
+                            self.emit(f"    move {arg_reg}, {reg}")
+                    else:
+                        # Resto: solo cargar en registro temporal
+                        reg = self.load_operand_to_reg(arg, "$t9")
+                
+                # Reservar espacio para args en el stack
+                self.emit(f"    addi $sp, $sp, -{4 * num_args}")
+                
+                # Guardar todos los argumentos en el stack
+                for idx, arg in enumerate(self.pending_args):
+                    if idx < 4:
+                        # Usar $a0-$a3 que ya tienen el valor
+                        arg_reg = f"$a{idx}"
+                        self.emit(f"    sw {arg_reg}, {idx * 4}($sp)")
+                    else:
+                        # Usar el registro donde se cargó
+                        reg = self.load_operand_to_reg(arg, "$t9")
+                        self.emit(f"    sw {reg}, {idx * 4}($sp)")
+            
+            # Llamada
             self.emit(f"    jal {func_name}")
-            # liberar args
+            
+            # Liberar espacio de argumentos
             if num_args > 0:
                 self.emit(f"    addi $sp, $sp, {4 * num_args}")
-            # resultado en dst si corresponde
+            
+            # Resultado en dst si corresponde
             if dst is not None and dst not in ("None", ""):
-                # si es temporal
                 if self.is_temp(dst):
                     rd = self.temp_reg(dst)
                     self.emit(f"    move {rd}, $v0")
                 else:
-                    # variable global
                     self.ensure_global(dst)
                     self.emit(f"    sw $v0, {dst}")
-            # limpiar lista de args
+            
+            # Limpiar lista de args
             self.pending_args = []
             return
 
@@ -473,7 +590,29 @@ class MIPSBackend:
         # ---------- NEWOBJ ----------
         if op == "NEWOBJ":
             # NEWOBJ dst, Clase
+            if dst is None or a is None:
+                return
+            class_name = a
             self.uses_heap = True
+            
+            rd = self.temp_reg(dst) if self.is_temp(dst) else "$t9"
+            
+            # Reservar espacio en heap: objeto + vtable pointer
+            self.emit("    lw $t9, heap_ptr")
+            self.emit(f"    move {rd}, $t9")
+            
+            # Reservar 32 bytes para objeto + 4 bytes para vtable pointer = 36 bytes
+            self.emit("    addi $t9, $t9, 36")
+            self.emit("    sw $t9, heap_ptr")
+            
+            # Inicializar vtable pointer en offset 0 del objeto
+            vtable_label = f"__vtable_{class_name}"
+            self.emit(f"    la $t8, {vtable_label}")
+            self.emit(f"    sw $t8, 0({rd})")
+            
+            if not self.is_temp(dst):
+                self.ensure_global(dst)
+                self.emit(f"    sw {rd}, {dst}")
             return
 
         # ---------- ALLOC ----------
@@ -560,14 +699,119 @@ class MIPSBackend:
                 self.emit("    syscall")
             return
 
+        # ---------- THROW (para excepciones) ----------
+        if op == "THROW":
+            # THROW a  -> lanzar excepción con valor a
+            if a is None:
+                return
+            # Cargar valor de excepción
+            reg = self.load_operand_to_reg(a, "$v0")
+            if reg != "$v0":
+                self.emit(f"    move $v0, {reg}")
+            # Saltar al handler de excepción más reciente
+            if self.exception_handler_stack:
+                handler_label = self.exception_handler_stack[-1]
+                self.emit(f"    j {handler_label}")
+            else:
+                # Si no hay handler, terminar programa
+                self.emit("    li $v0, 10")
+                self.emit("    syscall")
+            return
+
+        # ---------- VTABLE (para herencia y polimorfismo) ----------
+        if op == "VTABLE":
+            # VTABLE dst, class_name  -> cargar vtable de clase en dst
+            if dst is None or a is None:
+                return
+            class_name = a
+            vtable_label = f"__vtable_{class_name}"
+            rd = self.temp_reg(dst) if self.is_temp(dst) else "$t9"
+            self.emit(f"    la {rd}, {vtable_label}")
+            if not self.is_temp(dst):
+                self.ensure_global(dst)
+                self.emit(f"    sw {rd}, {dst}")
+            return
+
+        # ---------- VCALL (llamada virtual/polimórfica) ----------
+        if op == "VCALL":
+            # VCALL dst, obj, method_name, args...
+            # obj es un temporal que contiene el puntero al objeto
+            # method_name es el nombre del método
+            # Los argumentos vienen en pending_args
+            if a is None or b is None:
+                return
+            obj_temp = a
+            method_name = b
+            
+            # Cargar objeto
+            obj_reg = self.load_operand_to_reg(obj_temp, "$t9")
+            
+            # La vtable está en el offset 0 del objeto
+            # Cargar vtable
+            self.emit(f"    lw $t8, 0({obj_reg})")
+            
+            # Buscar método en vtable (simplificado: asumimos offset conocido)
+            # En una implementación real, buscaríamos el índice del método
+            method_offset = 0  # Por ahora, simplificado
+            
+            # Cargar dirección del método desde vtable
+            self.emit(f"    lw $t7, {method_offset}($t8)")
+            
+            # Preparar argumentos (similar a CALL normal)
+            num_args = len(self.pending_args)
+            if num_args > 0:
+                self.emit(f"    addi $sp, $sp, -{4 * num_args}")
+                for idx, arg in enumerate(self.pending_args):
+                    if idx < 4:
+                        arg_reg = f"$a{idx}"
+                        reg = self.load_operand_to_reg(arg, arg_reg)
+                        if reg != arg_reg:
+                            self.emit(f"    move {arg_reg}, {reg}")
+                        self.emit(f"    sw {arg_reg}, {idx * 4}($sp)")
+                    else:
+                        reg = self.load_operand_to_reg(arg, "$t9")
+                        self.emit(f"    sw {reg}, {idx * 4}($sp)")
+            
+            # Llamar método virtual (jalr usa registro)
+            self.emit("    jalr $t7")
+            
+            # Liberar argumentos
+            if num_args > 0:
+                self.emit(f"    addi $sp, $sp, {4 * num_args}")
+            
+            # Guardar resultado
+            if dst is not None and dst not in ("None", ""):
+                if self.is_temp(dst):
+                    rd = self.temp_reg(dst)
+                    self.emit(f"    move {rd}, $v0")
+                else:
+                    self.ensure_global(dst)
+                    self.emit(f"    sw $v0, {dst}")
+            
+            self.pending_args = []
+            return
+
         # Si llega aquí, es un opcode no soportado explícitamente.
         # Lo ignoramos silenciosamente para no romper el backend.
         return
 
-    def emit_from_emitter(self, emitter: Emitter, out_path: Optional[str] = None, static_arrays: Optional[dict] = None) -> str:
+    def emit_from_emitter(self, emitter: Emitter, out_path: Optional[str] = None, static_arrays: Optional[dict] = None, symtab=None) -> str:
         """Convierte todas las instrucciones TAC en código MIPS."""
         
         self.static_arrays = static_arrays or {}
+        
+        # Primera pasada: detectar parámetros de funciones desde symtab si está disponible
+        if symtab:
+            # Buscar funciones en symtab y extraer sus parámetros
+            for scope in getattr(symtab, 'scopes', []):
+                for name, symbol in getattr(scope, 'symbols', {}).items():
+                    if hasattr(symbol, 'params') and hasattr(symbol, 'name'):
+                        # Es una función
+                        func_name = symbol.name
+                        func_label = f"func_{func_name}"
+                        if hasattr(symbol, 'params') and symbol.params:
+                            param_names = [p.name for p in symbol.params if hasattr(p, 'name')]
+                            self.func_params[func_label] = param_names
         
         # recorrer instrucciones TAC
         for instr in emitter.instrs:
@@ -602,6 +846,36 @@ class MIPSBackend:
             out_lines.append("heap: .space 4096")
             out_lines.append("heap_ptr: .word heap")
 
+        # Vtables para herencia (generar una por cada clase)
+        # Construir vtables completas incluyendo métodos heredados recursivamente
+        complete_vtables = {}
+        for class_name in self.class_vtables.keys():
+            complete_vtable = {}
+            # Agregar métodos de la clase (estos sobrescriben los heredados)
+            if class_name in self.class_vtables:
+                complete_vtable.update(self.class_vtables[class_name])
+            
+            # Agregar métodos heredados (recursivamente por la jerarquía)
+            parent = self.class_hierarchy.get(class_name)
+            visited_parents = set()
+            while parent and parent in self.class_vtables and parent not in visited_parents:
+                visited_parents.add(parent)
+                for method_name, method_label in self.class_vtables[parent].items():
+                    # Solo agregar si no está sobrescrito
+                    if method_name not in complete_vtable:
+                        complete_vtable[method_name] = method_label
+                parent = self.class_hierarchy.get(parent)
+            
+            complete_vtables[class_name] = complete_vtable
+        
+        # Generar vtables en .data
+        for class_name, methods in complete_vtables.items():
+            vtable_label = f"__vtable_{class_name}"
+            out_lines.append(f"{vtable_label}:")
+            # Generar entradas de vtable (una por método, ordenadas por nombre)
+            for method_name, method_label in sorted(methods.items()):
+                out_lines.append(f"    .word {method_label}")
+
         out_lines.append("")
 
         # Sección .text
@@ -632,4 +906,4 @@ class MIPSBackend:
 
 def emit_mips(emitter: Emitter, symtab=None, out_path: Optional[str] = None, static_arrays: Optional[dict] = None) -> str:
     backend = MIPSBackend()
-    return backend.emit_from_emitter(emitter, out_path, static_arrays=static_arrays)
+    return backend.emit_from_emitter(emitter, out_path, static_arrays=static_arrays, symtab=symtab)

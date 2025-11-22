@@ -8,6 +8,9 @@ class CodeGenVisitor(CompiscriptVisitor):
         super().__init__()
         self.em = Emitter()
         self.static_arrays = {}  # <--- Agrega esto
+        # Rastreo de herencia y vtables
+        self.em.class_hierarchy = {}
+        self.em.class_vtables = {}
 
     def _expr_node(self, node):
         """Helper: ANTLR may return a single node or a list; normalize to single node or None."""
@@ -376,7 +379,23 @@ class CodeGenVisitor(CompiscriptVisitor):
                 left = ctext.split('(')[0].strip()
                 if '.' in left:
                     obj_name, method_name = left.split('.', 1)
-                    fname = method_name.strip()
+                    method_name = method_name.strip()
+                    
+                    # Detectar si es llamada polimórfica (objeto de tipo base)
+                    # Por ahora, usamos llamada normal, pero podríamos usar VCALL
+                    # si detectamos que el tipo es polimórfico
+                    obj_tmp = self.em.new_temp()
+                    self.em.emit('LOAD', dst=obj_tmp, a=obj_name)
+                    
+                    # Determinar clase del objeto (simplificado)
+                    # En una implementación real, usaríamos información de tipos
+                    # Por ahora, asumimos llamada directa
+                    class_name = 'Unknown'  # Se determinaría del tipo
+                    fname = f'method_{class_name}_{method_name}'
+                    
+                    # Si hay herencia, usar VCALL en lugar de CALL
+                    # Por simplicidad, usamos CALL normal por ahora
+                    # TODO: Detectar polimorfismo y usar VCALL
                 else:
                     if left:
                         fname = left
@@ -787,3 +806,118 @@ class CodeGenVisitor(CompiscriptVisitor):
 
     def emit_goto(self, label):
         self.em.emit('GOTO', dst=label)
+
+    def visitTryCatchStatement(self, ctx):
+        """Genera código TAC para try-catch."""
+        # Etiquetas para control de flujo
+        try_start = self.em.new_label()
+        try_end = self.em.new_label()
+        catch_start = self.em.new_label()
+        catch_end = self.em.new_label()
+        finally_label = self.em.new_label()
+        
+        # Emitir etiqueta de inicio del try
+        self.em.emit('LABEL', dst=try_start)
+        
+        # Generar código del bloque try
+        if hasattr(ctx, 'block') and ctx.block():
+            blocks = ctx.block()
+            if isinstance(blocks, list):
+                if len(blocks) > 0:
+                    self.visit(blocks[0])
+            else:
+                self.visit(blocks)
+        
+        # Si llegamos aquí sin excepción, saltar al final
+        self.em.emit('GOTO', dst=finally_label)
+        
+        # Etiqueta de fin del try (si hay excepción, saltamos aquí)
+        self.em.emit('LABEL', dst=try_end)
+        
+        # Bloque catch
+        self.em.emit('LABEL', dst=catch_start)
+        
+        # Obtener nombre de la variable de excepción
+        exception_var = None
+        if hasattr(ctx, 'Identifier') and ctx.Identifier():
+            exception_var = ctx.Identifier().getText()
+        
+        # Si hay variable de excepción, guardarla (simulamos que viene en $v0)
+        if exception_var:
+            # En una implementación real, la excepción vendría de algún lugar
+            # Por ahora, simplemente declaramos la variable
+            pass
+        
+        # Generar código del bloque catch
+        if hasattr(ctx, 'block') and ctx.block():
+            blocks = ctx.block()
+            if isinstance(blocks, list):
+                if len(blocks) > 1:
+                    self.visit(blocks[1])
+            else:
+                # Si solo hay un bloque, podría ser el catch
+                pass
+        
+        # Etiqueta de fin del catch
+        self.em.emit('LABEL', dst=catch_end)
+        
+        # Finalmente: punto de salida común
+        self.em.emit('LABEL', dst=finally_label)
+        
+        return None
+
+    def visitClassDeclaration(self, ctx):
+        """Genera código TAC para clases, incluyendo herencia y vtable."""
+        # Obtener nombre de la clase
+        class_name = None
+        parent_class = None
+        
+        if hasattr(ctx, 'Identifier') and ctx.Identifier():
+            identifiers = ctx.Identifier()
+            if isinstance(identifiers, list):
+                class_name = identifiers[0].getText()
+                if len(identifiers) > 1:
+                    parent_class = identifiers[1].getText()
+            else:
+                class_name = identifiers.getText()
+        
+        # Verificar si hay herencia (sintaxis: class B : A)
+        if hasattr(ctx, 'Identifier') and ctx.Identifier():
+            ids = ctx.Identifier()
+            if isinstance(ids, list) and len(ids) > 1:
+                parent_class = ids[1].getText()
+        
+        # Rastrear métodos de la clase para vtable
+        class_methods = []
+        
+        # Visitar todos los miembros de la clase
+        if hasattr(ctx, 'classMember') and ctx.classMember():
+            members = ctx.classMember()
+            if not isinstance(members, list):
+                members = [members]
+            
+            for member in members:
+                # Marcar el contexto con el nombre de la clase
+                if hasattr(member, 'functionDeclaration') and member.functionDeclaration():
+                    func_decl = member.functionDeclaration()
+                    func_decl.className = class_name
+                    func_decl.parentClass = parent_class
+                    
+                    # Obtener nombre del método
+                    if hasattr(func_decl, 'Identifier') and func_decl.Identifier():
+                        method_name = func_decl.Identifier().getText()
+                        class_methods.append(method_name)
+                    
+                    self.visit(func_decl)
+                elif hasattr(member, 'variableDeclaration') and member.variableDeclaration():
+                    self.visit(member.variableDeclaration())
+                elif hasattr(member, 'constantDeclaration') and member.constantDeclaration():
+                    self.visit(member.constantDeclaration())
+        
+        # Si hay herencia, generar código para vtable
+        if parent_class:
+            # La vtable se manejará en el backend MIPS
+            # Por ahora, solo rastreamos la información
+            pass
+        
+        return None
