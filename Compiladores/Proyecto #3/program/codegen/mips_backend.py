@@ -891,11 +891,70 @@ class MIPSBackend:
 
         out = "\n".join(out_lines)
 
-
-        # Si el final profesional no está presente al final, agregarlo
+        # SIEMPRE agregar código de terminación al final del programa
+        # Verificar si ya existe código de terminación en las últimas líneas
         out_lines_clean = [line.strip() for line in out.splitlines() if line.strip()]
-        if not any(l.startswith('li $v0, 10') for l in out_lines_clean[-4:]) and not any(l == 'syscall' for l in out_lines_clean[-2:]):
-            out = out.rstrip() + '\n    li $v0, 10                # service: exit\n    syscall\n'
+        has_exit = False
+        
+        # Buscar si hay syscall de exit en las últimas 20 líneas
+        # Buscar patrón: "li $v0, 10" seguido de "syscall"
+        for i in range(len(out_lines_clean) - 1, max(-1, len(out_lines_clean) - 20), -1):
+            if i < 0:
+                break
+            line = out_lines_clean[i]
+            # Buscar "li $v0, 10" (con diferentes formatos posibles)
+            if ('li $v0, 10' in line or 
+                'li $v0,10' in line.replace(' ', '') or 
+                '$v0, 10' in line or
+                '$v0,10' in line.replace(' ', '') or
+                'v0, 10' in line or
+                'v0,10' in line.replace(' ', '')):
+                # Verificar que la siguiente línea tenga syscall
+                if i + 1 < len(out_lines_clean):
+                    next_line = out_lines_clean[i + 1]
+                    if 'syscall' in next_line:
+                        has_exit = True
+                        break
+                # También verificar la misma línea (puede estar en la misma)
+                if 'syscall' in line:
+                    has_exit = True
+                    break
+        
+        # CASO ESPECIAL: Si el programa tiene main, verificar si main termina con exit
+        # (ya se maneja en emit_epilogue, pero por si acaso)
+        if self.has_main:
+            # Buscar en todo el código si hay un exit después de main
+            main_found = False
+            for i, line in enumerate(out_lines_clean):
+                if 'main:' in line or line == 'main:':
+                    main_found = True
+                    # Buscar exit después de main
+                    for j in range(i, min(i + 50, len(out_lines_clean))):
+                        if 'li $v0, 10' in out_lines_clean[j] or 'li $v0,10' in out_lines_clean[j].replace(' ', ''):
+                            if j + 1 < len(out_lines_clean) and 'syscall' in out_lines_clean[j + 1]:
+                                has_exit = True
+                                break
+                    break
+        
+        # Si no hay exit, agregarlo SIEMPRE al final (sin excepciones)
+        # Esto cubre TODOS los casos:
+        # 1. Programa que termina en etiqueta (L9, L0, etc.)
+        # 2. Programa que termina en main sin exit
+        # 3. Programa que termina directamente sin etiqueta
+        # 4. Cualquier otro caso
+        if not has_exit:
+            # Asegurar que termine con salto de línea
+            out = out.rstrip()
+            # Si la última línea es una etiqueta, agregar código después
+            last_line = out_lines_clean[-1] if out_lines_clean else ""
+            if last_line.endswith(':') and not last_line.startswith('    '):
+                # Es una etiqueta, agregar código después
+                out += '\n    # Terminación del programa\n'
+            else:
+                out += '\n\n    # Terminación del programa\n'
+            # SIEMPRE agregar syscall de exit - GARANTIZADO
+            out += '    li $v0, 10                # service: exit\n'
+            out += '    syscall\n'
 
         if out_path is not None:
             with open(out_path, "w", encoding="utf-8") as f:
