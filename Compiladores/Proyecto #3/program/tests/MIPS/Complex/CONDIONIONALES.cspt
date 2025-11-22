@@ -1,0 +1,60 @@
+// TAC generado por Compiscript IDE
+[Semantic] line 21:12 Identificador no declarado: i
+
+=== Código Intermedio (TAC) ===
+
+[Semantic] line 21:12 Identificador no declarado: i
+STORE 3 -> x
+STORE 7 -> y
+STORE 0 -> z
+t0 = LOAD x
+t1 = LOAD y
+t2 = t0 LT t1
+IFZ t2 GOTO L0
+None = PRINT "Y is greater than X"
+GOTO L1
+L0:
+L1:
+t3 = LOAD x
+t4 = LOAD y
+t5 = t3 EQ t4
+IFZ t5 GOTO L2
+None = PRINT "X is equal to Y"
+GOTO L3
+L2:
+None = PRINT "X is not equal to Y"
+L3:
+L4:
+t6 = LOAD x
+t7 = t6 LT 10
+IFZ t7 GOTO L5
+t8 = LOAD z
+t9 = LOAD x
+t10 = t8 ADD t9
+STORE t10 -> z
+t10 = LOAD x
+t11 = t10 ADD 1
+STORE t11 -> x
+GOTO L4
+L5:
+STORE 1 -> i
+L6:
+t11 = LOAD i
+t12 = t11 LE 5
+IFZ t12 GOTO L7
+None = PRINT "Iteration: "
+t13 = LOAD i
+None = PRINT t13
+GOTO L6
+L7:
+t14 = LOAD z
+t15 = LOAD y
+t16 = t14 GE t15
+IFZ t16 GOTO L8
+None = PRINT "Z is greater than or equal to Y"
+GOTO L9
+L8:
+None = PRINT "Z is less than Y"
+L9:
+
+===============================

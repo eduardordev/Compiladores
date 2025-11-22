@@ -1,0 +1,7 @@
+var a: integer = 5;
+var b: integer = 12;
+var c: integer;
+
+c = a + b;
+a = c - 3;
+b = a * 2;

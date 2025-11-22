@@ -220,16 +220,15 @@ class MIPSBackend:
 
         # Soporte para CALL con asignación: tX = CALL foo
         if op == "CALL" and dst is not None and dst not in ("None", ""):
-            # Llama como siempre, pero mueve el resultado a dst
-            # Simula como si fuera CALL a; dst = $v0
             # Llama a la función normalmente
             self.instr_to_mips(Instr("CALL", a=a))
-            if self.is_temp(dst):
-                rd = self.temp_reg(dst)
-                self.emit(f"    move {rd}, $v0")
-            else:
+            # Si dst es global, siempre guardar el puntero retornado
+            if not self.is_temp(dst):
                 self.ensure_global(dst)
                 self.emit(f"    sw $v0, {dst}")
+            else:
+                rd = self.temp_reg(dst)
+                self.emit(f"    move {rd}, $v0")
             return
 
         # Soporte para PRINT con asignación a None: None = PRINT t1
@@ -432,6 +431,13 @@ class MIPSBackend:
             if func_name is None:
                 return
 
+
+            # Solo emitir 'jal' si func_name es una función real (por convención de prefijo)
+            if not (str(func_name).startswith('func_') or str(func_name).startswith('method_')):
+                # No es función, no emitir nada
+                self.pending_args = []
+                return
+
             num_args = len(self.pending_args)
             if num_args > 0:
                 # reservar espacio para args
@@ -616,12 +622,8 @@ class MIPSBackend:
             out_lines.append(line)
 
         out = "\n".join(out_lines)
-
-
-        # Si el final profesional no está presente al final, agregarlo
-        out_lines_clean = [line.strip() for line in out.splitlines() if line.strip()]
-        if not any(l.startswith('li $v0, 10') for l in out_lines_clean[-4:]) and not any(l == 'syscall' for l in out_lines_clean[-2:]):
-            out = out.rstrip() + '\n    li $v0, 10                # service: exit\n    syscall\n'
+        # Siempre agregar el final profesional al final del archivo
+        out = out.rstrip() + '\n    li $v0, 10                # service: exit\n    syscall\n'
 
         if out_path is not None:
             with open(out_path, "w", encoding="utf-8") as f:

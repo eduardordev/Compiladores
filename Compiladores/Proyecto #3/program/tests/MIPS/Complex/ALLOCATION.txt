@@ -1,0 +1,10 @@
+var a: integer = 5;
+var b: integer = 10;
+var c: integer = 20;
+var d: integer = 30;
+var e: integer = 40;
+
+var x: integer;
+
+x = (a + b) * (c - d) + (e * a) - (b + c) + (a * b) - (c * d);
+print(x);

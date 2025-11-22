@@ -306,39 +306,28 @@ class CodeGenVisitor(CompiscriptVisitor):
 
         if call_node:
             # HANDLE: constructor 'new Class(...)' -> NEWOBJ + CALL init
-            try:
-                if isinstance(ctext, str) and ctext.strip().startswith('new'):
-                    # extract class name after 'new'
-                    class_name = ctext.replace('new', '', 1).split('(')[0].strip()
-                    dst_new = self.em.new_temp()
-                    self.em.emit('NEWOBJ', dst=dst_new, a=class_name)
-                    # collect evaluated arguments (if present)
-                    args = []
-                    if hasattr(call_node, 'arguments') and call_node.arguments():
-                        for ex in call_node.arguments().expression():
-                            val = self.visitAnyExpression(ex)
+            # --- CONSTRUCTOR: new Clase(...) ---
+            if isinstance(ctext, str) and ctext.strip().startswith('new'):
+                class_name = ctext.replace('new', '', 1).split('(')[0].strip()
+                dst_new = self.em.new_temp()
+                self.em.emit('NEWOBJ', dst=dst_new, a=class_name)
+                args = []
+                if hasattr(call_node, 'arguments') and call_node.arguments():
+                    for ex in call_node.arguments().expression():
+                        val = self.visitAnyExpression(ex)
+                        if val is not None:
+                            args.append(val)
+                if not args:
+                    for ch in children:
+                        if hasattr(ch, 'accept') and 'Expression' in type(ch).__name__:
+                            val = self.visitAnyExpression(ch)
                             if val is not None:
                                 args.append(val)
-                    # si no hay argumentos explícitos, buscar en hijos
-                    if not args:
-                        for ch in children:
-                            if hasattr(ch, 'accept') and 'Expression' in type(ch).__name__:
-                                val = self.visitAnyExpression(ch)
-                                if val is not None:
-                                    args.append(val)
-                    # El objeto recién creado es el primer argumento implícito (this)
-                    self.em.emit('ARG', a=dst_new)
-                    for a in args:
-                        self.em.emit('ARG', a=a)
-                    # Llamar a init
-                    # Para constructor:
-                    self.em.emit('CALL', dst=None, a=f'method_{class_name}_init')
-                    # Para métodos:
-                    fname = f'method_{obj_name}_{method_name}'
-                    self.em.emit('CALL', dst=dst, a=fname)
-                    return dst_new
-            except Exception:
-                pass
+                self.em.emit('ARG', a=dst_new)
+                for a in args:
+                    self.em.emit('ARG', a=a)
+                self.em.emit('CALL', dst=dst_new, a=f'method_{class_name}_init')
+                return dst_new
             # --- resto: llamadas a métodos normales ---
             args = []
             try:
@@ -371,15 +360,18 @@ class CodeGenVisitor(CompiscriptVisitor):
             for a in emit_args:
                 self.em.emit('ARG', a=a)
             dst = self.em.new_temp()
-            fname = 'unknown'
+            fname = None
             try:
                 left = ctext.split('(')[0].strip()
                 if '.' in left:
                     obj_name, method_name = left.split('.', 1)
-                    fname = method_name.strip()
+                    obj_name = obj_name.strip()
+                    method_name = method_name.strip()
+                    if obj_name and method_name:
+                        fname = f"method_{obj_name}_{method_name}"
                 else:
                     if left:
-                        fname = left
+                        fname = f"func_{left}"
                     else:
                         def find_identifier(node):
                             try:
@@ -398,9 +390,11 @@ class CodeGenVisitor(CompiscriptVisitor):
                             return None
                         f = find_identifier(call_node)
                         if f:
-                            fname = f
+                            fname = f"func_{f}"
             except Exception:
                 pass
+            if not fname or 'Unknown' in fname:
+                raise Exception(f"No se pudo resolver el nombre del método/procedimiento para la llamada: {ctext}")
             self.em.emit('CALL', dst=dst, a=fname)
             return dst
 

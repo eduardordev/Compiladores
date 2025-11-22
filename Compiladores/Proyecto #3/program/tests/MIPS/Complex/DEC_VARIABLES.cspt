@@ -1,0 +1,17 @@
+// TAC generado por Compiscript IDE
+=== Código Intermedio (TAC) ===
+
+STORE 5 -> a
+STORE 12 -> b
+t0 = LOAD a
+t1 = LOAD b
+t2 = t0 ADD t1
+STORE t2 -> c
+t2 = LOAD c
+t3 = t2 SUB 3
+STORE t3 -> a
+t3 = LOAD a
+t4 = t3 MUL 2
+STORE t4 -> b
+
+===============================
