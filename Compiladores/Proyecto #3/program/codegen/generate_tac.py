@@ -23,7 +23,7 @@ def run(filepath: str) -> int:
         return 2
 
     cg = CodeGenVisitor()
-    emitter = cg.visitProgram(tree)
+    emitter, _ = cg.visitProgram(tree)
 
     if emitter is None:
         print('[Error] No se generó ningún código intermedio.')
@@ -48,13 +48,13 @@ def run_mips(filepath: str) -> int:
         print('[Error] Falló el análisis semántico, no se puede generar MIPS.')
         return 2
     cg = CodeGenVisitor()
-    emitter = cg.visitProgram(tree)
+    emitter, static_arrays = cg.visitProgram(tree)
     if emitter is None:
         print('[Error] No se generó ningún código intermedio.')
         return 2
     # output path: same dir, same base name with .s
     out_path = os.path.splitext(filepath)[0] + '.s'
-    mips = emit_mips(emitter, sem_visitor.symtab if sem_visitor else None, out_path=out_path)
+    mips = emit_mips(emitter, sem_visitor.symtab if sem_visitor else None, out_path=out_path, static_arrays=static_arrays)
     # Solo imprime el código ensamblador, no el mensaje de guardado
     print(mips)
     return 0

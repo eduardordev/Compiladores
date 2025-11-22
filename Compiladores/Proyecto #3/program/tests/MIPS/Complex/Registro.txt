@@ -1,0 +1,10 @@
+function main(): integer {
+    var a = 4;
+    var b = 7;
+    var c = 2;
+    var d = 9;
+
+    var r = (a * b) + (b * c) - (a + d) + (b - c) * (d - a);
+
+    return r;
+}

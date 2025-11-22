@@ -294,6 +294,24 @@ class CompiscriptIDE(tk.Tk):
         finally:
             os.unlink(tmp_path)
 
+    def _generate_tac(self):
+        """Genera TAC usando Driver.py --tac"""
+        code = self.text.get('1.0', 'end-1c')
+        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
+            tmp.write(code)
+            tmp_path = tmp.name
+        try:
+            p = subprocess.run(
+                [sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--tac'],
+                capture_output=True,
+                text=True
+            )
+            output = p.stdout if p.stdout.strip() else p.stderr
+            return output or '', p.returncode, p.stderr
+        finally:
+            os.unlink(tmp_path)
+
+
     def ver_ast_visual(self):
         """Show a visual AST in a new window. If ANTLR parser is importable, parse in-process
         and build a tree; otherwise fall back to textual AST produced by Driver.py and show
@@ -487,13 +505,6 @@ class CompiscriptIDE(tk.Tk):
             messagebox.showerror('Error al guardar', f'No se pudo escribir el archivo: {e}')
 
     def guardar_misp(self):
-        # Obtener el TAC que ya está generado en el panel
-        tac_text = self.tac_panel['text'].get('1.0', 'end-1c').strip()
-        
-        if not tac_text or tac_text == '(sin salida)':
-            messagebox.showinfo('Sin TAC', 'Primero debes generar el TAC haciendo clic en "⚙️ TAC"')
-            return
-        
         # Guardar archivo MIPS
         path = filedialog.asksaveasfilename(
             defaultextension='.s',
@@ -503,72 +514,45 @@ class CompiscriptIDE(tk.Tk):
         if not path:
             return
         
-        import tempfile
-        tac_file = None
         try:
-            # Guardar el código fuente para regenerar con backend MIPS
-            tac_file = tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8')
-            tac_file.write(self.text.get('1.0', 'end-1c'))
-            tac_file.close()
-
-            # Importar backend
+            # Obtener el código fuente
+            code = self.text.get('1.0', 'end-1c')
+            
+            # Importar módulos necesarios
             import sys
             sys.path.insert(0, ROOT)
-            from codegen.tac import Emitter, Instr
-            from codegen.mips_backend import emit_mips
-
-            # Parsear el TAC texto a objetos Instr (soporta STORE, LOAD, RETURN, operaciones aritméticas)
-            emitter = Emitter()
-            for line in tac_text.splitlines():
-                line = line.strip()
-                if not line or line.startswith('//') or line.startswith('#'):
-                    continue
-
-                # LABEL
-                if line.endswith(':'):
-                    emitter.instrs.append(Instr('LABEL', dst=line.rstrip(':')))
-                    continue
-                # GOTO
-                if line.startswith('GOTO '):
-                    parts = line.split()
-                    emitter.instrs.append(Instr('GOTO', dst=parts[1]))
-                    continue
-                # IFZ
-                if line.startswith('IFZ '):
-                    parts = line.split()
-                    emitter.instrs.append(Instr('IFZ', a=parts[1], dst=parts[3]))
-                    continue
-                # RETURN
-                if line.startswith('RETURN'):
-                    parts = line.split()
-                    if len(parts) == 2:
-                        emitter.instrs.append(Instr('RET', dst=parts[1]))
-                    else:
-                        emitter.instrs.append(Instr('RET'))
-                    continue
-                # STORE a -> b
-                if line.startswith('STORE '):
-                    # Ejemplo: STORE t2 -> r1
-                    parts = line.split()
-                    a = parts[1]
-                    dst = parts[3]
-                    emitter.instrs.append(Instr('STORE', dst=dst, a=a))
-                    continue
-                # tX = LOAD var
-                if ' = LOAD ' in line:
-                    dst, rest = line.split(' = ', 1)
-                    op, a = rest.split()
-                    emitter.instrs.append(Instr('LOAD', dst=dst, a=a))
-                    continue
-                # tX = tY ADD tZ (o SUB, MUL, DIV)
-                if '=' in line and any(op in line for op in [' ADD ', ' SUB ', ' MUL ', ' DIV ']):
-                    dst, expr = line.split('=', 1)
-                    dst = dst.strip()
-                    a, op, b = expr.strip().split()
-                    emitter.instrs.append(Instr(op, dst=dst, a=a, b=b))
-                    continue
-            # Generar código MIPS
-            mips_code = emit_mips(emitter, symtab=None, out_path=None)
+            from antlr4 import InputStream, CommonTokenStream
+            from CompiscriptLexer import CompiscriptLexer
+            from CompiscriptParser import CompiscriptParser
+            from codegen.codegen import CodeGenVisitor
+            import importlib
+            import codegen.mips_backend
+            importlib.reload(codegen.mips_backend)
+            emit_mips = codegen.mips_backend.emit_mips
+            
+            # Parsear el código para generar TAC y static_arrays
+            input_stream = InputStream(code)
+            lexer = CompiscriptLexer(input_stream)
+            token_stream = CommonTokenStream(lexer)
+            parser = CompiscriptParser(token_stream)
+            tree = parser.program()
+            
+            # Generar TAC y obtener static_arrays
+            visitor = CodeGenVisitor()
+            result = visitor.visit(tree)
+            
+            # El visitor retorna (emitter, static_arrays)
+            if isinstance(result, tuple) and len(result) == 2:
+                emitter, static_arrays = result
+            else:
+                emitter = result
+                static_arrays = {}
+            
+            # DEBUG: Mostrar qué hay en static_arrays
+            print(f"DEBUG static_arrays: {static_arrays}")
+            
+            # Generar código MIPS con static_arrays
+            mips_code = emit_mips(emitter, symtab=None, out_path=None, static_arrays=static_arrays)
             
             if not mips_code or not mips_code.strip():
                 messagebox.showinfo('Sin MIPS', 'No se generó código MIPS para guardar.')
@@ -587,28 +571,21 @@ class CompiscriptIDE(tk.Tk):
             import traceback
             error_detail = traceback.format_exc()
             messagebox.showerror('Error al generar MIPS', f'Error:\n{str(e)}\n\nDetalle:\n{error_detail[:500]}')
-        finally:
-            if tac_file:
+            def _generate_tac(self):
+                code = self.text.get('1.0', 'end-1c')
+                with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
+                    tmp.write(code)
+                    tmp_path = tmp.name
                 try:
-                    os.unlink(tac_file.name)
-                except:
-                    pass
-
-    def _generate_tac(self):
-        code = self.text.get('1.0', 'end-1c')
-        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.cps', encoding='utf-8') as tmp:
-            tmp.write(code)
-            tmp_path = tmp.name
-        try:
-            p = subprocess.run(
-                [sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--tac'],
-                capture_output=True,
-                text=True
-            )
-            output = p.stdout if p.stdout.strip() else p.stderr
-            return output or '', p.returncode, p.stderr
-        finally:
-            os.unlink(tmp_path)
+                    p = subprocess.run(
+                        [sys.executable, os.path.join(ROOT, 'Driver.py'), tmp_path, '--tac'],
+                        capture_output=True,
+                        text=True
+                    )
+                    output = p.stdout if p.stdout.strip() else p.stderr
+                    return output or '', p.returncode, p.stderr
+                finally:
+                    os.unlink(tmp_path)
 
 
     def _update_output(self, panel, text):

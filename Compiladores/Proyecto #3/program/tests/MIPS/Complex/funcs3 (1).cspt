@@ -1,0 +1,36 @@
+// PARA NUESTRA GRAMATICA
+function Calc(x: integer, y: integer): integer {
+    var r: integer = x * y;
+    return r;
+}
+
+function Suma(a: integer, b: integer, c: integer): integer {
+    var z: integer = Calc(a, b);
+    var t: integer = z + c;
+    return t;
+}
+
+var res: integer = Suma(2, 3, 4);
+print(res);
+
+
+
+
+
+// EJEMPLO MARK
+fun Calc(x:int, y: int) {
+    var r = x * y;
+
+    return r;
+}
+
+fun Suma(a: int, b: int, c: int){
+    var z = Calc(a,b);
+
+    var t = z + c;
+
+    return t;
+}
+
+var res = Suma(2,3,4);
+print res;

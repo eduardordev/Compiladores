@@ -1,0 +1,5 @@
+function main(): integer {
+    var xs: integer[] = [4, 8, 12];
+    var r = xs[1] + xs[2];
+    return r;
+}

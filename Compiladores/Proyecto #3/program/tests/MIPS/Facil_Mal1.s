@@ -1,11 +1,44 @@
-# MIPS generado por Compiscript IDE
-[Semantic] line 1:0 Asignación incompatible: integer[] := integer
 .data
-x: .word 0
-xs: .word 0
-xs[1]: .word 0
+res: .word 0
 
 .text
-    sw [1,2,3], xs
-    lw $t0, xs[1]
-    sw $t0, x
+.globl main
+
+main:
+    # Prólogo
+    addi $sp, $sp, -8
+    sw $ra, 4($sp)
+    sw $fp, 0($sp)
+    move $fp, $sp
+
+    # Pasar argumentos (por ejemplo, 5 y 7)
+    li $a0, 5
+    li $a1, 7
+    jal suma         # Llamada a la función
+
+    # Guardar el resultado retornado en res
+    sw $v0, res
+
+    # Epílogo
+    move $sp, $fp
+    lw $ra, 4($sp)
+    lw $fp, 0($sp)
+    addi $sp, $sp, 8
+    jr $ra
+
+suma:
+    # Prólogo
+    addi $sp, $sp, -8
+    sw $ra, 4($sp)
+    sw $fp, 0($sp)
+    move $fp, $sp
+
+    # Sumar argumentos
+    add $v0, $a0, $a1
+
+    # Epílogo
+    move $sp, $fp
+    lw $ra, 4($sp)
+    lw $fp, 0($sp)
+    addi $sp, $sp, 8
+    jr $ra

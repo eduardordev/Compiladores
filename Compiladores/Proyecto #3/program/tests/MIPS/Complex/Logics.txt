@@ -1,0 +1,7 @@
+function main(): integer {
+    var a = 12;
+    var b = 7;
+    var c = 20;
+    var r = ((a > b) && (c != a)) || (b >= 5 && c < 30);
+    return r;
+}

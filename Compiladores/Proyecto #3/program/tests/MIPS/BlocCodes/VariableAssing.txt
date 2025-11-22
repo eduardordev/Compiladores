@@ -1,0 +1,6 @@
+function main(): integer {
+    var x = 5;
+    var y = 12;
+    var r = x + y;
+    return r;
+}

@@ -162,7 +162,13 @@ class SemanticVisitor(CompiscriptVisitor):
         if hasattr(ctx, 'typeAnnotation') and ctx.typeAnnotation():
             declared_type = self.visit(ctx.typeAnnotation())
         if hasattr(ctx, 'initializer') and ctx.initializer():
-            expr_t = self.visit(ctx.initializer())
+            # Si el initializer es un arrayLiteral, usa su tipo real
+            init = ctx.initializer()
+            expr_t = self.visit(init)
+            # Si el initializer es un arrayLiteral, fuerza el tipo correcto
+            if hasattr(init, 'arrayLiteral') and init.arrayLiteral():
+                arr_type = self.visit(init.arrayLiteral())
+                expr_t = arr_type
             if declared_type and not are_compatible(declared_type, expr_t):
                 raise at(ctx, f'Asignación incompatible: {declared_type} := {expr_t}')
             if not declared_type:
@@ -652,12 +658,15 @@ class SemanticVisitor(CompiscriptVisitor):
         return self.set_type(ctx, VOID)
 
     def visitLiteralExpr(self, ctx):
+        # Si tiene arrayLiteral, propaga el tipo correcto
+        if hasattr(ctx, 'arrayLiteral') and ctx.arrayLiteral():
+            return self.visit(ctx.arrayLiteral())
         tx = ctx.getText()
         if tx in ('true','false'):
             return BOOLEAN
         if tx == 'null':
             return NULL
-        if tx.startswith('\"') and tx.endswith('\"'):
+        if tx.startswith('"') and tx.endswith('"'):
             return STRING
         # si es número
         return FLOAT if '.' in tx else INTEGER

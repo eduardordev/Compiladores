@@ -1,0 +1,15 @@
+function main(): integer {
+    var i = 1;
+    var acc = 0;
+
+    while (i <= 10) {
+        if (i % 2 == 0) {
+            acc = acc + i * 3;
+        } else {
+            acc = acc + i;
+        }
+        i = i + 1;
+    }
+
+    return acc;
+}

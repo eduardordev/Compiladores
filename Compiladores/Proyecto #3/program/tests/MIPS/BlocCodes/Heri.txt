@@ -1,0 +1,16 @@
+class A {
+    function f(): integer {
+        return 5;
+    }
+}
+
+class B extends A {
+    function f(): integer {
+        return 20;
+    }
+}
+
+function main(): integer {
+    var obj: A = new B();
+    return obj.f();
+}

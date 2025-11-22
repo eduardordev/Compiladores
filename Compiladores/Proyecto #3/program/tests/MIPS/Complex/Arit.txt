@@ -1,0 +1,7 @@
+function main(): integer {
+    var x = 10;
+    var y = 4;
+    var z = 2;
+    var r = (x * (y + z) - (x / z)) + (y * y - z);
+    return r;
+}

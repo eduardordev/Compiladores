@@ -7,6 +7,7 @@ class CodeGenVisitor(CompiscriptVisitor):
     def __init__(self):
         super().__init__()
         self.em = Emitter()
+        self.static_arrays = {}  # <--- Agrega esto
 
     def _expr_node(self, node):
         """Helper: ANTLR may return a single node or a list; normalize to single node or None."""
@@ -56,22 +57,104 @@ class CodeGenVisitor(CompiscriptVisitor):
         return self.visitChildren(tree)
 
     def visitProgram(self, ctx: CompiscriptParser.ProgramContext):
-        # Visit every top-level statement explicitly
+        """
+        Visitar TODAS las declaraciones del programa:
+        - Clases (con sus métodos)
+        - Funciones globales
+        - Statements globales
+        """
+        if hasattr(ctx, 'classDeclaration'):
+            class_decls = ctx.classDeclaration()
+            if class_decls:
+                # Puede ser lista o elemento único
+                if isinstance(class_decls, list):
+                    for class_decl in class_decls:
+                        self.visit(class_decl)
+                else:
+                    self.visit(class_decls)
+        
+        if hasattr(ctx, 'functionDeclaration'):
+            func_decls = ctx.functionDeclaration()
+            if func_decls:
+                if isinstance(func_decls, list):
+                    for func_decl in func_decls:
+                        self.visit(func_decl)
+                else:
+                    self.visit(func_decls)
+        
         if hasattr(ctx, 'statement'):
-            for st in ctx.statement():
-                self.visit(st)
-        return self.em
+            statements = ctx.statement()
+            if statements:
+                if isinstance(statements, list):
+                    for st in statements:
+                        self.visit(st)
+                else:
+                    # Si es función que devuelve lista
+                    try:
+                        for st in statements:
+                            self.visit(st)
+                    except TypeError:
+                        # Si es un solo elemento
+                        self.visit(statements)
+        
+        return self.em, self.static_arrays
 
     def visitStatement(self, ctx):
         for ch in ctx.getChildren():
             if hasattr(ch, 'accept'):
-                if type(ch).__name__ == 'VariableDeclarationContext':
+                tname = type(ch).__name__
+                if tname == 'VariableDeclarationContext':
                     self.visitVariableDeclaration(ch)
                     continue
-                if type(ch).__name__ == 'AssignmentContext':
+                if tname == 'AssignmentContext':
                     self.visitAssignment(ch)
                     continue
+                if tname == 'ExpressionStatementContext':
+                    self.visitExpressionStatement(ch)
+                    continue
+                if tname == 'PrintStatementContext':
+                    self.visitPrintStatement(ch)
+                    continue
                 self.visit(ch)
+        return None
+
+
+    def visitClassDeclaration(self, ctx):
+        # Obtener nombre de la clase
+        class_name = None
+        if hasattr(ctx, 'Identifier') and ctx.Identifier():
+            if isinstance(ctx.Identifier(), list):
+                class_name = ctx.Identifier()[0].getText()
+            else:
+                class_name = ctx.Identifier().getText()
+        
+        # Visitar todos los métodos de la clase
+        if hasattr(ctx, 'functionDeclaration'):
+            methods = ctx.functionDeclaration()
+            if methods:
+                if isinstance(methods, list):
+                    for method in methods:
+                        # Marcar el contexto con el nombre de la clase
+                        method.className = class_name
+                        self.visit(method)
+                else:
+                    methods.className = class_name
+                    self.visit(methods)
+        
+        return None
+
+
+    def visitExpressionStatement(self, ctx):
+        # Forzar la evaluación de la expresión para que se generen instrucciones TAC
+        if ctx.expression():
+            self.visitAnyExpression(ctx.expression())
+        return None
+
+    def visitPrintStatement(self, ctx):
+        # print '(' expression ')' ';'
+        if ctx.expression():
+            val = self.visitAnyExpression(ctx.expression())
+            self.em.emit('PRINT', a=val)
         return None
 
     def visitVariableDeclarationStatement(self, ctx):
@@ -84,18 +167,49 @@ class CodeGenVisitor(CompiscriptVisitor):
         val = None
         if ctx.initializer():
             init = ctx.initializer()
+            
+            # Detectar inicialización con arreglo literal: [1,2,3]
+            # Si el initializer es un arrayLiteral, extrae los valores reales
+            if hasattr(init, 'arrayLiteral') and init.arrayLiteral():
+                arr_ctx = init.arrayLiteral()
+                elems = []
+                for expr in arr_ctx.expression():
+                    v = self.visitAnyExpression(expr)
+                    try:
+                        elems.append(int(v))
+                    except Exception:
+                        elems.append(v)
+                self.static_arrays[name] = elems
+                
+                # ✅ CRÍTICO: Emitir instrucción para registrar la variable
+               # self.em.emit('STORE', dst=name, a='0')
+                return
+            
+            # Evaluar la expresión de inicialización
             for ch in init.getChildren():
                 cname = type(ch).__name__
                 if 'Expr' in cname or 'Expression' in cname or 'Literal' in cname:
                     val = self.visitAnyExpression(ch)
                     break
+            
+            # Fallback: string literal de arreglo "[1,2,3]"
+            if isinstance(val, str) and val.startswith('[') and val.endswith(']'):
+                try:
+                    elems = [int(x.strip()) for x in val[1:-1].split(',') if x.strip()]
+                    self.static_arrays[name] = elems
+                    
+                    # ✅ CRÍTICO: Emitir instrucción para registrar la variable
+                    #self.em.emit('STORE', dst=name, a='0')
+                    return
+                except Exception:
+                    pass
 
-        if val is None:
-            val = 'undefined'
+            if val is None:
+                val = 'undefined'
 
-        self.em.emit('STORE', dst=name, a=val)
-        if isinstance(val, str) and val.startswith('t'):
-            self.em.free_temp(val)
+            self.em.emit('STORE', dst=name, a=val)
+            if isinstance(val, str) and val.startswith('t'):
+                self.em.free_temp(val)
 
     def visitAnyExpression(self, ctx):
         """Recursively visit expressions to produce a value or temporary."""
@@ -108,6 +222,39 @@ class CodeGenVisitor(CompiscriptVisitor):
 
         if 'Literal' in cname:
             return ctext
+        
+        # Check if this is array indexing: identifier[expression]
+        if '[' in ctext and ']' in ctext and not ctext.startswith('new'):
+            # Extract array name and index expression
+            try:
+                arr_name = ctext.split('[')[0].strip()
+                # Find the index expression within brackets
+                
+                # Look for array access pattern in children
+                for i, ch in enumerate(children):
+                    ch_text = ch.getText() if hasattr(ch, 'getText') else ''
+                    if ch_text == '[':
+                        # Next child should be the index expression
+                        if i + 1 < len(children):
+                            idx_expr = children[i + 1]
+                            idx_val = self.visitAnyExpression(idx_expr)
+                            
+                            # Generate TAC for array access
+                            t_base = self.em.new_temp()
+                            self.em.emit('LOAD', dst=t_base, a=arr_name)
+                            
+                            t_off = self.em.new_temp()
+                            self.em.emit('MUL', dst=t_off, a=idx_val, b='4')
+                            
+                            t_addr = self.em.new_temp()
+                            self.em.emit('ADD', dst=t_addr, a=t_base, b=t_off)
+                            
+                            t_result = self.em.new_temp()
+                            self.em.emit('LOAD', dst=t_result, a=t_addr)
+                            
+                            return t_result
+            except Exception:
+                pass
 
         if 'AdditiveExpr' in cname and ctx.getChildCount() > 1:
             left = self.visitAnyExpression(ctx.getChild(0))
@@ -132,6 +279,10 @@ class CodeGenVisitor(CompiscriptVisitor):
         # function call handling: detect CallExpr or arguments anywhere in subtree
         def find_call_node(node):
             try:
+                node_text = node.getText() if hasattr(node, 'getText') else ''
+                # Exclude array indexing patterns
+                if '[' in node_text and ']' in node_text:
+                    return None
                 if 'CallExpr' in type(node).__name__:
                     return node
                 if hasattr(node, 'arguments') and node.arguments():
@@ -150,23 +301,45 @@ class CodeGenVisitor(CompiscriptVisitor):
             return None
 
         call_node = find_call_node(ctx)
-        if call_node is None:
-            # fallback: if textual pattern looks like a call
-            if '(' in ctext and ctext.endswith(')'):
-                call_node = ctx
+        if call_node is None and '(' in ctext and ctext.endswith(')') and '[' not in ctext:
+            call_node = ctx
 
         if call_node:
-            # HANDLE: constructor 'new Class(...)' -> NEWOBJ
+            # HANDLE: constructor 'new Class(...)' -> NEWOBJ + CALL init
             try:
                 if isinstance(ctext, str) and ctext.strip().startswith('new'):
                     # extract class name after 'new'
                     class_name = ctext.replace('new', '', 1).split('(')[0].strip()
                     dst_new = self.em.new_temp()
                     self.em.emit('NEWOBJ', dst=dst_new, a=class_name)
+                    # collect evaluated arguments (if present)
+                    args = []
+                    if hasattr(call_node, 'arguments') and call_node.arguments():
+                        for ex in call_node.arguments().expression():
+                            val = self.visitAnyExpression(ex)
+                            if val is not None:
+                                args.append(val)
+                    # si no hay argumentos explícitos, buscar en hijos
+                    if not args:
+                        for ch in children:
+                            if hasattr(ch, 'accept') and 'Expression' in type(ch).__name__:
+                                val = self.visitAnyExpression(ch)
+                                if val is not None:
+                                    args.append(val)
+                    # El objeto recién creado es el primer argumento implícito (this)
+                    self.em.emit('ARG', a=dst_new)
+                    for a in args:
+                        self.em.emit('ARG', a=a)
+                    # Llamar a init
+                    # Para constructor:
+                    self.em.emit('CALL', dst=None, a=f'method_{class_name}_init')
+                    # Para métodos:
+                    fname = f'method_{obj_name}_{method_name}'
+                    self.em.emit('CALL', dst=dst, a=fname)
                     return dst_new
             except Exception:
                 pass
-            # collect evaluated arguments (if present)
+            # --- resto: llamadas a métodos normales ---
             args = []
             try:
                 if hasattr(call_node, 'arguments') and call_node.arguments():
@@ -176,50 +349,38 @@ class CodeGenVisitor(CompiscriptVisitor):
                             args.append(val)
             except Exception:
                 pass
-            # if no explicit arguments collected, scan children for expressions
             if not args:
                 for ch in children:
                     if hasattr(ch, 'accept') and 'Expression' in type(ch).__name__:
                         val = self.visitAnyExpression(ch)
                         if val is not None:
                             args.append(val)
-            # if this is a method call like obj.method(...), pass the object as implicit first arg
             emit_args = []
             try:
                 left_text = ctext.split('(')[0].strip()
                 if '.' in left_text:
-                    # method call like obj.method(...)
-                    # load receiver and pass as first (implicit) arg
                     obj_name = left_text.split('.', 1)[0].strip()
                     if obj_name:
                         tmp_obj = self.em.new_temp()
                         self.em.emit('LOAD', dst=tmp_obj, a=obj_name)
-                        # prefer ARG + CALL to remain compatible with current backend
                         emit_args.append(tmp_obj)
             except Exception:
                 pass
-            # then append explicit arguments
             for a in args:
                 emit_args.append(a)
             for a in emit_args:
                 self.em.emit('ARG', a=a)
             dst = self.em.new_temp()
-            # find function name: prefer textual extraction from call text before '('
             fname = 'unknown'
             try:
                 left = ctext.split('(')[0].strip()
-                # Detectar llamada tipo obj.metodo(...)
                 if '.' in left:
                     obj_name, method_name = left.split('.', 1)
-                    # Nombre real de la función es el método
-                    # (el receptor ya fue cargado y añadido a `emit_args` más arriba)
                     fname = method_name.strip()
                 else:
-                    # Nombre por defecto: texto antes de '('
                     if left:
                         fname = left
                     else:
-                        # fallback: search identifier in subtree
                         def find_identifier(node):
                             try:
                                 if hasattr(node, 'Identifier') and node.Identifier():
@@ -240,7 +401,6 @@ class CodeGenVisitor(CompiscriptVisitor):
                             fname = f
             except Exception:
                 pass
-            # Emitir CALL
             self.em.emit('CALL', dst=dst, a=fname)
             return dst
 
@@ -254,17 +414,51 @@ class CodeGenVisitor(CompiscriptVisitor):
 
         if 'LeftHandSide' in cname or 'PrimaryAtom' in cname or 'Identifier' in cname:
             name = ctx.getText()
-            # property access like obj.prop -> GETPROP
+            
+            # **PRIMERO: Check for array access**
+            if isinstance(name, str) and '[' in name and ']' in name:
+                try:
+                    arr_name = name.split('[')[0].strip()
+                    idx_str = name[name.index('[')+1:name.rindex(']')].strip()
+                    
+                    # Si el índice es solo un número
+                    if idx_str.isdigit():
+                        idx_val = idx_str
+                    else:
+                        # Si es una expresión más compleja, necesitamos evaluarla
+                        # pero por ahora usamos el valor directo
+                        idx_val = idx_str
+                    
+                    # Generate TAC for array access
+                    t_base = self.em.new_temp()
+                    self.em.emit('LOAD', dst=t_base, a=arr_name)
+                    
+                    t_off = self.em.new_temp()
+                    self.em.emit('MUL', dst=t_off, a=idx_val, b='4')
+                    
+                    t_addr = self.em.new_temp()
+                    self.em.emit('ADD', dst=t_addr, a=t_base, b=t_off)
+                    
+                    t_result = self.em.new_temp()
+                    self.em.emit('LOAD', dst=t_result, a=t_addr)
+                    
+                    return t_result
+                except Exception:
+                    pass
+            
+            # Property access like obj.prop -> GETPROP
             try:
-                if isinstance(name, str) and '.' in name:
+                if isinstance(name, str) and '.' in name and '[' not in name:
                     obj_name, prop = name.split('.', 1)
                     obj_tmp = self.em.new_temp()
                     self.em.emit('LOAD', dst=obj_tmp, a=obj_name)
                     dst_prop = self.em.new_temp()
-                    self.em.emit('GETPROP', dst=dst_prop, a=obj_tmp, b=prop)
+                    self.em.emit('GETPROP', dst=dst_prop, a=obj_tmp, b=f'"{prop}"')
                     return dst_prop
             except Exception:
                 pass
+            
+            # Simple identifier load
             tmp = self.em.new_temp()
             self.em.emit('LOAD', dst=tmp, a=name)
             return tmp
@@ -274,12 +468,35 @@ class CodeGenVisitor(CompiscriptVisitor):
                 if hasattr(ch, 'accept'):
                     return self.visitAnyExpression(ch)
 
+        # Refuerzo: si el nodo no es reconocido, recorre todos los hijos y combina los resultados
+        last_val = None
+        op = None
         for ch in children:
             if hasattr(ch, 'accept'):
                 val = self.visitAnyExpression(ch)
                 if val is not None:
-                    return val
-
+                    if last_val is None:
+                        last_val = val
+                    elif op is not None:
+                        dst = self.em.new_temp()
+                        if op == '+':
+                            self.em.emit('ADD', dst=dst, a=last_val, b=val)
+                        elif op == '-':
+                            self.em.emit('SUB', dst=dst, a=last_val, b=val)
+                        elif op == '*':
+                            self.em.emit('MUL', dst=dst, a=last_val, b=val)
+                        elif op == '/':
+                            self.em.emit('DIV', dst=dst, a=last_val, b=val)
+                        last_val = dst
+                        op = None
+                    else:
+                        last_val = val
+            elif hasattr(ch, 'getText'):
+                text = ch.getText()
+                if text in ['+', '-', '*', '/']:
+                    op = text
+        if last_val is not None:
+            return last_val
         return None
 
     def visitAssignment(self, ctx):
@@ -365,7 +582,7 @@ class CodeGenVisitor(CompiscriptVisitor):
                     obj_tmp = self.em.new_temp()
                     self.em.emit('LOAD', dst=obj_tmp, a=obj_name)
                     # SETPROP: receiver temp, property name, value
-                    self.em.emit('SETPROP', dst=obj_tmp, a=prop, b=val)
+                    self.em.emit('SETPROP', dst=obj_tmp, a=f'"{prop}"', b=val)
                     if isinstance(val, str) and val.startswith('t'):
                         self.em.free_temp(val)
                     return lhs_text
@@ -542,18 +759,29 @@ class CodeGenVisitor(CompiscriptVisitor):
 
     def visitFunctionDeclaration(self, ctx):
         fname = ctx.Identifier().getText()
-        label = f'func_{fname}'
+        # Detectar si es método de clase
+        parent = None
+        if hasattr(ctx, 'parentCtx') and ctx.parentCtx is not None:
+            parent = getattr(ctx.parentCtx, 'Identifier', lambda: None)()
+        elif hasattr(ctx, 'parent') and ctx.parent is not None:
+            parent = getattr(ctx.parent, 'Identifier', lambda: None)()
+        if hasattr(ctx, 'className'):
+            class_name = ctx.className
+        elif parent:
+            class_name = parent.getText() if hasattr(parent, 'getText') else str(parent)
+        else:
+            class_name = None
+        if class_name:
+            label = f'method_{class_name}_{fname}'
+        else:
+            label = f'func_{fname}'
         self.em.emit('LABEL', dst=label)
-        # parameters are already in symbol table (semantic phase) but for TAC we visit body
-        # body may be block or single statement
         if hasattr(ctx, 'block') and ctx.block():
             self.visit(ctx.block())
         elif hasattr(ctx, 'statement') and ctx.statement():
             self.visit(ctx.statement())
-        # emit a RET only if function body did not already emit one
         if not (self.em.instrs and getattr(self.em.instrs[-1], 'op', None) == 'RET'):
             self.em.emit('RET')
-        # mark end of function for clarity in TAC
         self.em.emit('LABEL', dst=f'end_{fname}')
         return None
 

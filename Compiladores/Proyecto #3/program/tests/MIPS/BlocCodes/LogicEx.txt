@@ -1,0 +1,6 @@
+function main(): integer {
+    var a = 5;
+    var b = 3;
+    var r = (a > b) && (b < 10);
+    return r;
+}

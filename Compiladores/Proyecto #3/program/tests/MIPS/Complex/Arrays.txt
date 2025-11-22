@@ -1,0 +1,6 @@
+function main(): integer {
+    var xs: integer[] = [4, 9, 2, 7, 6];
+    var r = 0;
+    r = xs[0] + xs[4] * xs[1] - xs[3] + (xs[2] * 10);
+    return r;
+}

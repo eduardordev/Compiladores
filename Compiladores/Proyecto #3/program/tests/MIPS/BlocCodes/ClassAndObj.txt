@@ -1,0 +1,15 @@
+class Punto {
+    var x: integer;
+    var y: integer;
+
+    function init(a: integer, b: integer) {
+        x = a;
+        y = b;
+    }
+}
+
+function main(): integer {
+    var p = new Punto();
+    p.init(4, 7);
+    return p.x + p.y;
+}

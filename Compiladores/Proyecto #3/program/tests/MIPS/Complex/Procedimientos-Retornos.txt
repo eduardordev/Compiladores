@@ -1,0 +1,14 @@
+function Triple(x: integer): integer {
+    return x * 3;
+}
+
+function Mezcla(a: integer, b: integer): integer {
+    var t1 = Triple(a);
+    var t2 = Triple(b);
+    return t1 + t2 + a;
+}
+
+function main(): integer {
+    var r = Mezcla(5, 8);
+    return r;
+}
