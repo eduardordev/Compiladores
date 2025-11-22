@@ -91,9 +91,30 @@ class MIPSBackend:
 
     def load_operand_to_reg(self, operand: str, target_reg: str, is_array: bool = False) -> str:
         """
-        Garantiza que 'operand' quede en 'target_reg'. Devuelve el registro
-        donde quedó el valor (normalmente target_reg).
+        Garantiza que 'operand' quede en 'target_reg'.
+        Para acceso a arreglos, sigue el patrón profesional: la base en $t0, offset en $t1, resultado en $t2, etc.
         """
+        # Si es acceso a arreglo tipo xs[idx]
+        if isinstance(operand, str) and '[' in operand and ']' in operand:
+            # Extraer nombre y el índice
+            arr_name = operand[:operand.index('[')]
+            idx_str = operand[operand.index('[')+1:operand.index(']')]
+            try:
+                idx = int(idx_str)
+            except Exception:
+                idx = idx_str
+            # la $t0, xs
+            self.emit(f"    la $t0, {arr_name}")
+            # li $t1, idx
+            self.emit(f"    li $t1, {idx}")
+            # mul $t1, $t1, 4
+            self.emit(f"    mul $t1, $t1, 4")
+            # add $t0, $t0, $t1
+            self.emit(f"    add $t0, $t0, $t1")
+            # lw $t2, 0($t0)
+            self.emit(f"    lw {target_reg}, 0($t0)")
+            return target_reg
+        # Si es temporal
         if self.is_temp(operand):
             reg = self.temp_reg(operand)
             if reg != target_reg:
@@ -126,12 +147,17 @@ class MIPSBackend:
 
 
     def emit_epilogue(self):
-        """Emite el epílogo estándar para main o funciones."""
+        """Emite el epílogo estándar para main o funciones. Si es main, termina con syscall."""
         self.emit("    move $sp, $fp")
         self.emit("    lw $ra, 28($sp)")
         self.emit("    lw $fp, 24($sp)")
         self.emit("    addi $sp, $sp, 32")
-        self.emit("    jr $ra")
+        # Si estamos en main, terminar con syscall
+        if getattr(self, 'current_func', None) == 'func_main' or getattr(self, 'current_func', None) == 'main':
+            self.emit("    li $v0, 10                # service: exit")
+            self.emit("    syscall")
+        else:
+            self.emit("    jr $ra")
 
     # ---------------------------------------------------------
     # ACA PASA LA MAGIA DEL TAC
@@ -364,18 +390,24 @@ class MIPSBackend:
             if dst is None or not self.is_temp(dst):
                 return
             rd = self.temp_reg(dst)
-
             if a is None or b is None:
                 return
-
-            # Verificar si es array para el primer operando
-            is_arr_a = not self.is_temp(a) and not self.is_immediate(a) and self.is_static_array(a)
-            is_arr_b = not self.is_temp(b) and not self.is_immediate(b) and self.is_static_array(b)
-
-            # cargar operandos a registros
-            ra = self.load_operand_to_reg(a, "$t9", is_array=is_arr_a)
-            rb = self.load_operand_to_reg(b, "$t8", is_array=is_arr_b)
-
+            # Si alguno de los operandos es acceso a arreglo, usa el patrón profesional
+            if (isinstance(a, str) and '[' in a and ']' in a) or (isinstance(b, str) and '[' in b and ']' in b):
+                # a y/o b pueden ser acceso a arreglo
+                if isinstance(a, str) and '[' in a and ']' in a:
+                    self.load_operand_to_reg(a, "$t7")
+                    ra = "$t7"
+                else:
+                    ra = self.load_operand_to_reg(a, "$t7")
+                if isinstance(b, str) and '[' in b and ']' in b:
+                    self.load_operand_to_reg(b, "$t1")
+                    rb = "$t1"
+                else:
+                    rb = self.load_operand_to_reg(b, "$t1")
+            else:
+                ra = self.load_operand_to_reg(a, "$t7")
+                rb = self.load_operand_to_reg(b, "$t1")
             if op == "ADD":
                 self.emit(f"    add {rd}, {ra}, {rb}")
             elif op == "SUB":
@@ -584,6 +616,12 @@ class MIPSBackend:
             out_lines.append(line)
 
         out = "\n".join(out_lines)
+
+
+        # Si el final profesional no está presente al final, agregarlo
+        out_lines_clean = [line.strip() for line in out.splitlines() if line.strip()]
+        if not any(l.startswith('li $v0, 10') for l in out_lines_clean[-4:]) and not any(l == 'syscall' for l in out_lines_clean[-2:]):
+            out = out.rstrip() + '\n    li $v0, 10                # service: exit\n    syscall\n'
 
         if out_path is not None:
             with open(out_path, "w", encoding="utf-8") as f:
